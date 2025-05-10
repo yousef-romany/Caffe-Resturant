@@ -46,14 +46,14 @@ body {
     --chart-5: 135 65% 55%;
     
     /* Sidebar specific theme */
-    --sidebar-background: 30 25% 94%; /* Slightly darker/muted beige for sidebar */
-    --sidebar-foreground: 240 10% 20%; /* Darker text for sidebar */
-    --sidebar-primary: 145 52% 55%; /* Emerald green for active/hover states */
+    --sidebar-background: 220 30% 97%; /* Very light cool grey */
+    --sidebar-foreground: 220 10% 25%; /* Cool dark grey */
+    --sidebar-primary: 145 52% 55%;    /* Emerald green for active items */
     --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
-    --sidebar-accent: 30 30% 88%; /* Accent for hover on non-primary items */
-    --sidebar-accent-foreground: 240 10% 15%;
-    --sidebar-border: 30 20% 80%;
-    --sidebar-ring: 145 52% 55%;
+    --sidebar-accent: 220 25% 92%;     /* Slightly darker light cool grey for hover - subtle */
+    --sidebar-accent-foreground: 145 52% 45%; /* Primary-like color for text on hover */
+    --sidebar-border: 220 20% 88%;     /* Border color */
+    --sidebar-ring: 145 52% 55%;       /* Focus ring as primary */
   }
 
   .dark {
@@ -93,14 +93,14 @@ body {
     --chart-5: 135 65% 70%;
 
     /* Dark Sidebar specific theme */
-    --sidebar-background: 240 8% 10%; /* Darker background for sidebar */
-    --sidebar-foreground: 30 40% 90%; /* Lighter text for sidebar */
-    --sidebar-primary: 145 52% 55%; /* Emerald green for active/hover states */
+    --sidebar-background: 220 15% 10%;  /* Dark cool grey */
+    --sidebar-foreground: 220 20% 88%;  /* Light cool grey */
+    --sidebar-primary: 145 52% 55%;     /* Emerald green for active items */
     --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
-    --sidebar-accent: 240 5% 18%; /* Accent for hover on non-primary items */
-    --sidebar-accent-foreground: 30 50% 95%;
-    --sidebar-border: 240 5% 15%;
-    --sidebar-ring: 145 52% 55%;
+    --sidebar-accent: 220 15% 18%;      /* Slightly lighter dark cool grey for hover - subtle */
+    --sidebar-accent-foreground: 145 52% 75%; /* Primary-like color for text on hover, lighter */
+    --sidebar-border: 220 10% 15%;      /* Border color */
+    --sidebar-ring: 145 52% 55%;        /* Focus ring as primary */
   }
 }
 
