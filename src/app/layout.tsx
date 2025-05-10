@@ -1,18 +1,12 @@
 import type { Metadata } from 'next';
-import { GeistSans } from 'next/font/google'; // Corrected import for GeistSans
-import { GeistMono } from 'next/font/google'; // Corrected import for GeistMono
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/custom/ThemeProvider';
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = GeistSans({ // Corrected usage
-  variable: '--font-geist-sans',
+const inter = Inter({
   subsets: ['latin'],
-});
-
-const geistMono = GeistMono({ // Corrected usage
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  variable: '--font-inter',
 });
 
 export const metadata: Metadata = {
@@ -27,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

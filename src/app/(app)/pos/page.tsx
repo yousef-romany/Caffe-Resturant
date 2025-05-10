@@ -1,6 +1,8 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
+import Image from 'next/image'; // Added import for next/image
 import { PageHeader } from '@/components/custom/PageHeader';
 import { MenuItemCard } from '@/components/custom/MenuItemCard';
 import { Button } from '@/components/ui/button';
@@ -252,3 +254,4 @@ export default function POSPage() {
     </>
   );
 }
+
