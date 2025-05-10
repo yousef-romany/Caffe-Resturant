@@ -112,3 +112,44 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body > *:not(.printable-area) {
+    display: none !important;
+  }
+  .printable-area { /* This class is applied to DialogContent for the invoice */
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important; /* Override sm:max-w-lg */
+    height: auto !important;
+    max-height: none !important; /* Override max-h-[60vh] */
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 20px !important; /* Adjust as needed for print layout */
+    background-color: white !important; /* Ensure printable background */
+    color: black !important; /* Ensure printable text */
+  }
+  .printable-area .printable-invoice-content { /* The inner content div */
+     /* Add any specific styles for the content itself if needed */
+  }
+  .printable-area .no-print { /* For elements like DialogFooter and buttons inside it */
+    display: none !important;
+  }
+   /* Hide the X close button of the dialog */
+  .printable-area > button[class*="absolute"] { /* Targets the X button if it's a direct child and absolutely positioned */
+     display: none !important;
+  }
+  /* Ensure images print */
+  .printable-area img {
+    max-width: 100% !important; /* Prevent images from overflowing */
+  }
+  /* Adjust scroll areas for printing */
+  .printable-area .overflow-y-auto {
+    overflow-y: visible !important;
+    max-height: none !important;
+  }
+}

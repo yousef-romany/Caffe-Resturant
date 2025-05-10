@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES, type Table } from '@/constants';
-import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon } from 'lucide-react';
+import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES, type Table, OrderStatus } from '@/constants';
+import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -33,8 +33,82 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
+import { arSA, enUS } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+const invoiceLabels = {
+  ar: {
+    invoiceTitle: "فاتورة الطلب",
+    date: "التاريخ",
+    status: "الحالة",
+    type: "النوع",
+    table: "الطاولة",
+    customer: "العميل",
+    address: "العنوان",
+    orderNotes: "ملاحظات الطلب",
+    items: "العناصر",
+    item: "العنصر",
+    quantity: "الكمية",
+    pricePerItem: "السعر لكل عنصر",
+    itemNotes: "ملاحظات",
+    total: "الإجمالي",
+    close: "إغلاق",
+    pay: "محاسبة ودفع",
+    print: "طباعة الفاتورة",
+    language: "اللغة",
+    arabic: "العربية",
+    english: "الإنجليزية",
+    statusText: {
+      "قيد الانتظار": "قيد الانتظار",
+      "قيد التجهيز": "قيد التجهيز",
+      "جاهز": "جاهز",
+      "مكتمل": "مكتمل",
+      "ملغى": "ملغى",
+    } as Record<OrderStatus, string>,
+    orderNumber: "رقم الطلب",
+    notesPlaceholder: "ملاحظات إضافية على الطلب بالكامل (اختياري)",
+    posTitleTable: (tableNum: string) => `نقطة البيع - طاولة ${tableNum}`,
+    posDescTable: (tableNum: string) => `إدارة طلب الطاولة ${tableNum}.`,
+    posTitleGeneral: "نقطة البيع",
+    posDescGeneral: "أنشئ طلبات جديدة بسرعة.",
+  },
+  en: {
+    invoiceTitle: "Order Invoice",
+    date: "Date",
+    status: "Status",
+    type: "Type",
+    table: "Table",
+    customer: "Customer",
+    address: "Address",
+    orderNotes: "Order Notes",
+    items: "Items",
+    item: "Item",
+    quantity: "Quantity",
+    pricePerItem: "Price per item",
+    itemNotes: "Notes",
+    total: "Total",
+    close: "Close",
+    pay: "Settle & Pay",
+    print: "Print Invoice",
+    language: "Language",
+    arabic: "Arabic",
+    english: "English",
+    statusText: {
+      "قيد الانتظار": "Pending",
+      "قيد التجهيز": "Preparing",
+      "جاهز": "Ready",
+      "مكتمل": "Completed",
+      "ملغى": "Cancelled",
+    } as Record<OrderStatus, string>,
+    orderNumber: "Order Number",
+    notesPlaceholder: "Additional notes for the entire order (optional)",
+    posTitleTable: (tableNum: string) => `POS - Table ${tableNum}`,
+    posDescTable: (tableNum: string) => `Manage order for table ${tableNum}.`,
+    posTitleGeneral: "Point of Sale",
+    posDescGeneral: "Quickly create new orders.",
+  },
+};
+
 
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -52,21 +126,23 @@ export default function POSPage() {
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [invoiceLanguage, setInvoiceLanguage] = useState<'ar' | 'en'>('ar');
 
 
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const currentLabels = invoiceLabels[invoiceLanguage];
+
   const availableTables = useMemo(() => {
-    // For new orders, show available tables. If modifying an order for a specific table, that table is the context.
     const tableNumFromQuery = searchParams.get('table');
     if (tableNumFromQuery) {
       const currentTable = DUMMY_TABLES.find(t => t.number === tableNumFromQuery);
       return currentTable ? [currentTable] : [];
     }
     return DUMMY_TABLES.filter(table => table.status === 'متاحة');
-  }, [searchParams]); // Recompute if searchParams change, DUMMY_TABLES is "static" for this memo
+  }, [searchParams]); 
 
   useEffect(() => {
     const tableNumFromQuery = searchParams.get('table');
@@ -81,7 +157,6 @@ export default function POSPage() {
         if (existingOrder) {
           setCurrentOrder(existingOrder.items);
           setGeneralOrderNotes(existingOrder.notes || '');
-           // If it's a delivery/takeaway order being edited, customer name might be relevant
           if(existingOrder.customerName) setCustomerName(existingOrder.customerName);
           if(existingOrder.type === 'توصيل' && existingOrder.deliveryAddress) setDeliveryAddress(existingOrder.deliveryAddress);
 
@@ -96,9 +171,7 @@ export default function POSPage() {
         setCurrentOrderId(null); 
       }
     } else {
-      // If not coming from tables page with a specific table, reset relevant fields
-      // This happens if user navigates to /pos directly or after clearing an order
-      setOrderType(''); // Or a default type
+      setOrderType(''); 
       setTableNumber('');
       setCurrentOrderId(null);
       setCurrentOrder([]);
@@ -179,21 +252,20 @@ export default function POSPage() {
     setDeliveryAddress('');
     setGeneralOrderNotes('');
     setCurrentOrderId(null);
-    setSearchTerm(''); // Also clear search term for menu items
-    setSelectedCategory('الكل'); // Reset category filter
+    setSearchTerm(''); 
+    setSelectedCategory('الكل'); 
+    setInvoiceLanguage('ar'); // Reset invoice language
 
     if (navigateToTables) {
       router.push('/tables');
     } else {
-      // Clear query params by replacing the current URL without them
-      // This ensures that if the user reloads /pos, it's a fresh session
       router.replace('/pos', undefined); 
     }
   };
 
   const handleClearOrder = () => {
     const wasTableOrder = orderType === 'صالة' && tableNumber;
-    resetPOSSession(!!wasTableOrder); // Navigate to /tables if it was a table order being cleared
+    resetPOSSession(!!wasTableOrder); 
     toast({ title: "تم مسح الطلب."});
   };
 
@@ -255,7 +327,7 @@ export default function POSPage() {
           items: JSON.parse(JSON.stringify(currentOrder)), 
           totalAmount: orderTotal,
           status: 'قيد الانتظار',
-          type: orderType as OrderType, // orderType is validated not to be empty
+          type: orderType as OrderType, 
           createdAt: new Date(),
           notes: generalOrderNotes.trim() || undefined,
         };
@@ -274,11 +346,10 @@ export default function POSPage() {
                 DUMMY_TABLES[tableIndex].orderId = orderToConfirm.id;
             } else if (tableIndex !== -1 && DUMMY_TABLES[tableIndex].status !== 'متاحة'){
               toast({ title: "تنبيه", description: `الطاولة ${tableNumber} ليست متاحة.`, variant: "destructive" });
-              return; // Prevent order if table suddenly became not available
+              return; 
             }
         }
     }
-
 
     setConfirmedOrder(orderToConfirm);
     setIsInvoiceDialogOpen(true);
@@ -296,9 +367,8 @@ export default function POSPage() {
   const handleOrderTypeChange = (value: OrderType | '') => {
     setOrderType(value);
     if (value !== 'صالة') {
-      setTableNumber(''); // Clear table number if not dine-in
+      setTableNumber(''); 
     }
-    // Clear customer specific fields if type changes away from takeaway/delivery
     if (value !== 'سفري' && value !== 'توصيل') {
         setCustomerName('');
     }
@@ -307,6 +377,9 @@ export default function POSPage() {
     }
   };
 
+  const handlePrintInvoice = () => {
+    window.print();
+  };
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -317,8 +390,8 @@ export default function POSPage() {
   return (
     <>
       <PageHeader 
-        title={tableNumber && orderType === 'صالة' ? `نقطة البيع - طاولة ${tableNumber}` : "نقطة البيع"}
-        description={tableNumber && orderType === 'صالة' ? `إدارة طلب الطاولة ${tableNumber}.` : "أنشئ طلبات جديدة بسرعة."}
+        title={tableNumber && orderType === 'صالة' ? currentLabels.posTitleTable(tableNumber) : currentLabels.posTitleGeneral}
+        description={tableNumber && orderType === 'صالة' ? currentLabels.posDescTable(tableNumber) : currentLabels.posDescGeneral}
         icon={(tableNumber && orderType === 'صالة') ? TableIcon : ShoppingCart}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
@@ -496,7 +569,7 @@ export default function POSPage() {
               )}
               <div>
                   <Label htmlFor="generalOrderNotes">ملاحظات الطلب</Label>
-                  <Textarea id="generalOrderNotes" value={generalOrderNotes} onChange={(e) => setGeneralOrderNotes(e.target.value)} placeholder="ملاحظات إضافية على الطلب بالكامل (اختياري)" className="mt-1"/>
+                  <Textarea id="generalOrderNotes" value={generalOrderNotes} onChange={(e) => setGeneralOrderNotes(e.target.value)} placeholder={currentLabels.notesPlaceholder} className="mt-1"/>
               </div>
             </div>
 
@@ -528,74 +601,85 @@ export default function POSPage() {
 
       {confirmedOrder && (
         <Dialog open={isInvoiceDialogOpen} onOpenChange={(open) => { if(!open) handleCloseInvoiceDialogAndClearPOS(); }}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Receipt className="h-6 w-6 text-primary"/>
-                فاتورة الطلب: {confirmedOrder.orderNumber}
-              </DialogTitle>
-              <DialogDescription>
-                التاريخ: {format(new Date(confirmedOrder.createdAt), 'PPpp', { locale: arSA })}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4 max-h-[60vh] overflow-y-auto ps-2 space-y-4">
-              <p><strong>الحالة:</strong> <span className={`px-2 py-0.5 rounded-full text-xs ${
-                  confirmedOrder.status === 'مكتمل' ? 'bg-green-100 text-green-700' : 
-                  confirmedOrder.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
-                  confirmedOrder.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
-                  confirmedOrder.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
-                  'bg-red-100 text-red-700' // For 'Cancelled'
-                }`}>{confirmedOrder.status}</span></p>
-              <p><strong>النوع:</strong> {confirmedOrder.type}</p>
-              {confirmedOrder.type === 'صالة' && confirmedOrder.tableNumber && <p><strong>الطاولة:</strong> {confirmedOrder.tableNumber}</p>}
-              {confirmedOrder.customerName && <p><strong>العميل:</strong> {confirmedOrder.customerName}</p>}
-              {confirmedOrder.type === 'توصيل' && confirmedOrder.deliveryAddress && <p><strong>العنوان:</strong> {confirmedOrder.deliveryAddress}</p>}
-              {confirmedOrder.notes && <p><strong>ملاحظات الطلب:</strong> {confirmedOrder.notes}</p>}
-              
-              <h4 className="font-semibold mt-4">العناصر:</h4>
-              <ul className="space-y-2">
-                {confirmedOrder.items.map((item, idx) => (
-                  <li key={`${item.id}-${idx}`} className="flex items-start gap-3 p-2 border rounded-md">
-                    <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover" data-ai-hint={item.dataAiHint || "food item"}/>
-                    <div className="flex-grow">
-                      <p className="font-medium">{item.name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
-                      <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} لكل عنصر</p>
-                      {item.notes && <p className="text-xs text-blue-600 italic">ملاحظات: {item.notes}</p>}
-                    </div>
-                    <p className="font-medium text-sm">${(item.price * item.quantity).toFixed(2)}</p>
-                  </li>
-                ))}
-              </ul>
-              <Separator className="my-3"/>
-              <div className="flex justify-start items-center">
-                <p className="text-lg font-bold">الإجمالي: ${confirmedOrder.totalAmount.toFixed(2)}</p>
+          <DialogContent className="sm:max-w-lg printable-area" dir={invoiceLanguage === 'en' ? 'ltr' : 'rtl'}>
+            <div className="printable-invoice-content"> {/* Inner div for actual printable content */}
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Receipt className="h-6 w-6 text-primary"/>
+                  {currentLabels.invoiceTitle}: {confirmedOrder.orderNumber}
+                </DialogTitle>
+                <DialogDescription>
+                  {currentLabels.date}: {format(new Date(confirmedOrder.createdAt), 'PPpp', { locale: invoiceLanguage === 'ar' ? arSA : enUS })}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4 max-h-[60vh] overflow-y-auto ps-2 space-y-4">
+                <p><strong>{currentLabels.status}:</strong> <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    confirmedOrder.status === 'مكتمل' ? 'bg-green-100 text-green-700' : 
+                    confirmedOrder.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
+                    confirmedOrder.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
+                    confirmedOrder.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
+                    'bg-red-100 text-red-700' 
+                  }`}>{currentLabels.statusText[confirmedOrder.status]}</span></p>
+                <p><strong>{currentLabels.type}:</strong> {confirmedOrder.type}</p>
+                {confirmedOrder.type === 'صالة' && confirmedOrder.tableNumber && <p><strong>{currentLabels.table}:</strong> {confirmedOrder.tableNumber}</p>}
+                {confirmedOrder.customerName && <p><strong>{currentLabels.customer}:</strong> {confirmedOrder.customerName}</p>}
+                {confirmedOrder.type === 'توصيل' && confirmedOrder.deliveryAddress && <p><strong>{currentLabels.address}:</strong> {confirmedOrder.deliveryAddress}</p>}
+                {confirmedOrder.notes && <p><strong>{currentLabels.orderNotes}:</strong> {confirmedOrder.notes}</p>}
+                
+                <h4 className="font-semibold mt-4">{currentLabels.items}:</h4>
+                <ul className="space-y-2">
+                  {confirmedOrder.items.map((item, idx) => (
+                    <li key={`${item.id}-${idx}`} className="flex items-start gap-3 p-2 border rounded-md">
+                      <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover" data-ai-hint={item.dataAiHint || "food item"}/>
+                      <div className="flex-grow">
+                        <p className="font-medium">{item.name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
+                        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} {currentLabels.pricePerItem}</p>
+                        {item.notes && <p className="text-xs text-blue-600 italic">{currentLabels.itemNotes}: {item.notes}</p>}
+                      </div>
+                      <p className="font-medium text-sm">${(item.price * item.quantity).toFixed(2)}</p>
+                    </li>
+                  ))}
+                </ul>
+                <Separator className="my-3"/>
+                <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-start' : 'justify-end'}`}>
+                  <p className="text-lg font-bold">{currentLabels.total}: ${confirmedOrder.totalAmount.toFixed(2)}</p>
+                </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="no-print pt-4 flex-wrap sm:justify-start">
+              <div className="w-full sm:w-auto mb-2 sm:mb-0">
+                 <Label htmlFor="invoiceLanguage" className="me-2">{currentLabels.language}:</Label>
+                <Select value={invoiceLanguage} onValueChange={(value) => setInvoiceLanguage(value as 'ar' | 'en')}>
+                  <SelectTrigger id="invoiceLanguage" className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ar">{currentLabels.arabic}</SelectItem>
+                    <SelectItem value="en">{currentLabels.english}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+               <Button type="button" variant="outline" onClick={handlePrintInvoice} className="sm:ms-auto">
+                <Printer className="me-2 h-4 w-4" /> {currentLabels.print}
+              </Button>
               <Button type="button" variant="outline" onClick={handleCloseInvoiceDialogAndClearPOS}>
-                إغلاق
+                {currentLabels.close}
               </Button>
               <Button type="button" className="bg-green-500 hover:bg-green-600 text-white" onClick={() => { 
-                  // Placeholder for payment logic
-                  // In a real app, update order status to 'Completed'
                   const orderIndex = DUMMY_ORDERS.findIndex(o => o.id === confirmedOrder.id);
                   if (orderIndex !== -1) {
                     DUMMY_ORDERS[orderIndex].status = 'مكتمل';
                   }
-                  // If it was a table order, the table might go to 'تحتاج تنظيف' or 'متاحة'
-                  // This logic is usually handled on the tables page or by a manager.
-                  // For simplicity, we can set it to 'تحتاج تنظيف' here.
                   if (confirmedOrder.type === 'صالة' && confirmedOrder.tableNumber) {
                     const tableIdx = DUMMY_TABLES.findIndex(t => t.number === confirmedOrder.tableNumber);
                     if (tableIdx !== -1) {
                        DUMMY_TABLES[tableIdx].status = 'تحتاج تنظيف';
-                       // DUMMY_TABLES[tableIdx].orderId = undefined; // Clear orderId after payment
                     }
                   }
                   toast({title: "تمت المحاسبة (تجريبي)"}); 
                   handleCloseInvoiceDialogAndClearPOS(); 
                 }}>
-                محاسبة ودفع
+                {currentLabels.pay}
               </Button>
             </DialogFooter>
           </DialogContent>
