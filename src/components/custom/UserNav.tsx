@@ -26,32 +26,31 @@ export function UserNav() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">اسم المستخدم</p>
+            <p className="text-sm font-medium leading-none">المسؤول</p> {/* Placeholder name */}
             <p className="text-xs leading-none text-muted-foreground">
-              user@example.com
+              admin@example.com {/* Placeholder email */}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href="/settings/profile"> {/* Assuming /settings/profile route exists or will be created */}
-              <UserIcon className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+            <Link href="/settings"> {/* Assuming /settings handles profile too, or a sub-route */}
+              <UserIcon className="ms-2 h-4 w-4" /> 
               <span>الملف الشخصي</span>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/settings">
-              <Settings className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+              <Settings className="ms-2 h-4 w-4" /> 
               <span>الإعدادات</span>
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+        <DropdownMenuItem onClick={() => alert('تسجيل الخروج (تجريبي)')}> {/* Placeholder action */}
+          <LogOut className="ms-2 h-4 w-4" /> 
           <span>تسجيل الخروج</span>
-          {/* Add logout functionality here */}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

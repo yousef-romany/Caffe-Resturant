@@ -4,6 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Info } from 'lucide-react';
+import Link from 'next/link';
+
 
 export default function SettingsPage() {
   return (
@@ -59,6 +63,31 @@ export default function SettingsPage() {
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">تحديث الحساب</Button>
           </CardContent>
         </Card>
+
+         <Separator />
+
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle>إعدادات الرواتب</CardTitle>
+            <CardDescription>إدارة معلومات رواتب الموظفين.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>معلومات هامة</AlertTitle>
+              <AlertDescription>
+                يتم إدارة رواتب الموظفين وتفاصيلهم من خلال صفحة <Link href="/employees" className="font-semibold text-primary hover:underline">إدارة الموظفين</Link>.
+                 هناك يمكنك إضافة موظفين جدد، تعديل بياناتهم بما في ذلك الرواتب، وتواريخ التعيين.
+              </AlertDescription>
+            </Alert>
+             <Button asChild variant="outline">
+                <Link href="/employees">
+                    الانتقال إلى صفحة الموظفين
+                </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
 
          <Separator />
 

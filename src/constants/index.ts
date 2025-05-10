@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -78,35 +78,65 @@ export const DUMMY_MENU_ITEMS: MenuItem[] = [
     id: '1', name: 'اسبريسو', category: 'مشروبات', price: 2.50, 
     imageUrl: 'https://picsum.photos/200/200?image=1060', dataAiHint: "coffee cup", description: "قهوة غنية وقوية",
     ingredients: [
-      { ingredientId: 'ing1', quantity: 7, unit: 'جرام' }, // 7g coffee beans
-      { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' } // 30ml water
+      { ingredientId: 'ing1', quantity: 7, unit: 'جرام' }, 
+      { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' } 
     ]
-    // Calculated cost would be (7 * 0.02) + (30 * 0.0001) = 0.14 + 0.003 = 0.143
   },
   { 
     id: '2', name: 'كابتشينو', category: 'مشروبات', price: 3.50, 
     imageUrl: 'https://picsum.photos/200/200?image=225', dataAiHint: "latte art", description: "اسبريسو مع رغوة حليب مبخر",
     ingredients: [
-      { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },   // 7g coffee beans
-      { ingredientId: 'ing2', quantity: 150, unit: 'مللي لتر' }, // 150ml milk
-      { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' } // 30ml water for espresso base
+      { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },   
+      { ingredientId: 'ing2', quantity: 150, unit: 'مللي لتر' }, 
+      { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' } 
     ]
-    // Calculated cost: (7*0.02) + (150*0.0015) + (30*0.0001) = 0.14 + 0.225 + 0.003 = 0.368
   },
   { 
-    id: '3', name: 'تشيز برجر', category: 'مأكولات', price: 8.00, cost: 2.50, // Manual cost for now
+    id: '3', name: 'تشيز برجر', category: 'مأكولات', price: 8.00, 
     imageUrl: 'https://picsum.photos/200/200?image=302', dataAiHint: "burger fries", description: "برجر لحم بالجبنة كلاسيكي",
-    // ingredients: [
-    //   { ingredientId: 'ing4', quantity: 1, unit: 'قطعة' }, // 1 burger patty
-    //   { ingredientId: 'ing5', quantity: 1, unit: 'قطعة' }, // 1 burger bun
-    //   // ... add cheese, lettuce, tomato ingredients if detailed
-    // ]
+    ingredients: [
+      { ingredientId: 'ing4', quantity: 1, unit: 'قطعة' }, 
+      { ingredientId: 'ing5', quantity: 1, unit: 'قطعة' }, 
+    ],
+    cost: 1.25 // Manual cost if not fully detailed, or calculated (1*1 + 1*0.25 = 1.25)
   },
-  { id: '4', name: 'بطاطس مقلية', category: 'مأكولات', price: 3.00, cost: 0.80, imageUrl: 'https://picsum.photos/200/200?image=431', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة" },
-  { id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00, cost: 1.50, imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate cake", description: "كيكة شوكولاتة غنية وفاخرة" },
-  { id: '6', name: 'شيشة تفاح', category: 'شيشة', price: 15.00, cost: 3.00, imageUrl: 'https://picsum.photos/200/200?image=603', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة" },
-  { id: '7', name: 'آيس لاتيه', category: 'مشروبات', price: 4.00, cost: 1.00, imageUrl: 'https://picsum.photos/200/200?image=455', dataAiHint: "iced coffee", description: "لاتيه مثلج مع ثلج" },
-  { id: '8', name: 'ساندويتش دجاج', category: 'مأكولات', price: 7.50, cost: 2.00, imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي" },
+  { 
+    id: '4', name: 'بطاطس مقلية', category: 'مأكولات', price: 3.00, 
+    imageUrl: 'https://picsum.photos/200/200?image=431', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة",
+    ingredients: [ { ingredientId: 'ing6', quantity: 150, unit: 'جرام' } ], // 150g potatoes * 0.002/g = 0.3
+    cost: 0.30
+  },
+  { 
+    id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00, 
+    imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate slice", description: "كيكة شوكولاتة غنية وفاخرة",
+    ingredients: [
+        { ingredientId: 'ing7', quantity: 50, unit: 'جرام' }, // Flour
+        { ingredientId: 'ing8', quantity: 20, unit: 'جرام' }, // Cocoa
+        { ingredientId: 'ing3', quantity: 30, unit: 'جرام' }, // Sugar
+    ], // Cost: (50*0.0012) + (20*0.02) + (30*0.0008) = 0.06 + 0.4 + 0.024 = 0.484
+    cost: 0.484
+  },
+  { 
+    id: '6', name: 'شيشة تفاح', category: 'شيشة', price: 15.00, 
+    imageUrl: 'https://picsum.photos/200/200?image=603', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة",
+    ingredients: [ {ingredientId: 'ing9', quantity: 25, unit: 'جرام'} ], // Cost 25 * 0.05 = 1.25
+    cost: 1.25
+  },
+  { 
+    id: '7', name: 'آيس لاتيه', category: 'مشروبات', price: 4.00, 
+    imageUrl: 'https://picsum.photos/200/200?image=455', dataAiHint: "iced latte", description: "لاتيه مثلج مع ثلج",
+    ingredients: [
+        { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },
+        { ingredientId: 'ing2', quantity: 180, unit: 'مللي لتر' },
+        { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' } 
+    ], // Cost: (7*0.02) + (180*0.0015) + (30*0.0001) = 0.14 + 0.27 + 0.003 = 0.413
+    cost: 0.413
+  },
+  { 
+    id: '8', name: 'ساندويتش دجاج', category: 'مأكولات', price: 7.50, 
+    imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي",
+    cost: 2.00 // Manual cost example
+  },
 ];
 
 export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
@@ -215,7 +245,7 @@ export let DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [
         supplierId: 'sup1',
         supplierName: 'موردو القهوة الممتازون',
         items: [
-            { ingredientId: 'ing1', ingredientName: 'حبوب بن أرابيكا', quantity: 5000, costPerUnit: 0.0195, unit: 'جرام' }, // 5kg at 19.5/kg
+            { ingredientId: 'ing1', ingredientName: 'حبوب بن أرابيكا', quantity: 5000, costPerUnit: 0.0195, unit: 'جرام' }, 
         ],
         totalAmount: 97.5,
         status: 'مستلم',
@@ -228,7 +258,7 @@ export let DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [
         supplierId: 'sup2',
         supplierName: 'ألبان المزرعة الطازجة',
         items: [
-            { ingredientId: 'ing2', ingredientName: 'حليب كامل الدسم', quantity: 10000, costPerUnit: 0.0015, unit: 'مللي لتر' }, // 10L at 1.5/L
+            { ingredientId: 'ing2', ingredientName: 'حليب كامل الدسم', quantity: 10000, costPerUnit: 0.0015, unit: 'مللي لتر' }, 
         ],
         totalAmount: 15,
         status: 'مؤكد',
@@ -248,7 +278,7 @@ export interface Employee {
   phone: string;
   email?: string;
   salary?: number;
-  hireDate: Date; // Use string for form input, Date for storage/logic
+  hireDate: Date; 
 }
 
 export let DUMMY_EMPLOYEES: Employee[] = [
@@ -266,7 +296,7 @@ export interface Customer {
   phone: string;
   email?: string;
   loyaltyPoints: number;
-  joinDate: Date; // Use string for form input, Date for storage/logic
+  joinDate: Date; 
   totalSpent?: number; 
   notes?: string;
 }
@@ -284,7 +314,7 @@ export interface Review {
   customerName: string; 
   rating: number; // 1 to 5
   comment?: string;
-  reviewDate: Date; // Use string for form input, Date for storage/logic
+  reviewDate: Date; 
   orderId?: string; 
   menuItemName?: string;
 }

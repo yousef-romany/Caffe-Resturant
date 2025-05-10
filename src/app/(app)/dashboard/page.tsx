@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_MENU_ITEMS, DUMMY_ORDERS } from '@/constants';
-import { DollarSign, ShoppingBag, Users, Utensils } from 'lucide-react';
+import { DUMMY_MENU_ITEMS, DUMMY_ORDERS, DUMMY_EMPLOYEES } from '@/constants';
+import { DollarSign, ShoppingBag, Users, Utensils, Wallet } from 'lucide-react'; // Added Wallet icon
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -9,6 +9,8 @@ export default function DashboardPage() {
   const totalSales = DUMMY_ORDERS.filter(o => o.status === 'مكتمل').reduce((sum, order) => sum + order.totalAmount, 0);
   const activeOrders = DUMMY_ORDERS.filter(o => o.status === 'قيد الانتظار' || o.status === 'قيد التجهيز').length;
   const totalMenuItems = DUMMY_MENU_ITEMS.length;
+  const totalEmployees = DUMMY_EMPLOYEES.length;
+  const placeholderCashInHand = 5750.75; // Placeholder value for cash in hand
   
   // This is a placeholder for top selling items logic
   const topSellingItems = DUMMY_MENU_ITEMS.slice(0, 3).map(item => ({ ...item, quantitySold: Math.floor(Math.random() * 50) + 10 }));
@@ -41,22 +43,22 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">عناصر القائمة</CardTitle>
-            <Utensils className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">الخزنة</CardTitle>
+            <Wallet className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalMenuItems}</div>
-            <p className="text-xs text-muted-foreground">إجمالي العناصر المتاحة</p>
+            <div className="text-2xl font-bold">${placeholderCashInHand.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">الرصيد الحالي بالخزنة</p>
           </CardContent>
         </Card>
          <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">عملاء اليوم</CardTitle>
+            <CardTitle className="text-sm font-medium">إجمالي الموظفين</CardTitle>
             <Users className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">125</div> {/* Placeholder */}
-            <p className="text-xs text-muted-foreground">15+ عن أمس</p>
+            <div className="text-2xl font-bold">{totalEmployees}</div> {/* Placeholder */}
+            <p className="text-xs text-muted-foreground">موظف نشط</p>
           </CardContent>
         </Card>
       </div>
@@ -79,7 +81,7 @@ export default function DashboardPage() {
                       order.status === 'مكتمل' ? 'bg-green-100 text-green-700' : 
                       order.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
                       order.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
-                       order.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : // Example for 'Ready'
+                       order.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
                       'bg-red-100 text-red-700' // For 'Cancelled'
                     }`}>{order.status}</span>
                 </div>

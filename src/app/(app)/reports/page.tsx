@@ -1,18 +1,21 @@
+
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, DUMMY_INGREDIENTS, DUMMY_PURCHASE_ORDERS, type Order, type OrderStatus, type Category, type Ingredient, type PurchaseOrder, type OrderType } from '@/constants';
+import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, DUMMY_INGREDIENTS, DUMMY_PURCHASE_ORDERS, DUMMY_EMPLOYEES, type Order, type OrderStatus, type Category, type Ingredient, type PurchaseOrder, type OrderType } from '@/constants';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, ShoppingBag, Utensils, BarChart3, Package, AlertTriangle, ClipboardList, ListChecks } from 'lucide-react';
+import { DollarSign, ShoppingBag, Utensils, BarChart3, Package, AlertTriangle, ClipboardList, ListChecks, Users, TrendingUp, TrendingDown, Wallet, Filter, CalendarDays } from 'lucide-react'; // Added icons
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 // Helper to generate random colors for Pie chart
-const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC', '#36A2EB', '#FF6384', '#FFCE56'];
+const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC', '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF'];
 
 interface MonthlySalesData {
   month: string;
@@ -29,27 +32,38 @@ interface OrderTypeSalesData {
   value: number;
 }
 
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+
 export default function ReportsPage() {
   const [monthlySales, setMonthlySales] = useState<MonthlySalesData[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySalesData[]>([]);
   const [orderTypeSales, setOrderTypeSales] = useState<OrderTypeSalesData[]>([]);
   const [topItems, setTopItems] = useState<{ name: string; sales: number; quantity: number }[]>([]);
+  
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalOrders, setTotalOrders] = useState(0);
   const [averageOrderValue, setAverageOrderValue] = useState(0);
+
+  const [totalSalariesPaid, setTotalSalariesPaid] = useState(0);
+  const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+
+  const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); // Placeholder
+  const [netCashFlow, setNetCashFlow] = useState(0); // Placeholder
 
   const [totalIngredients, setTotalIngredients] = useState(0);
   const [lowStockIngredientsCount, setLowStockIngredientsCount] = useState(0);
   const [lowStockItemsList, setLowStockItemsList] = useState<Ingredient[]>([]);
 
-  const [totalPurchaseOrders, setTotalPurchaseOrders] = useState(0);
-  const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
+  const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [recentPurchaseOrders, setRecentPurchaseOrders] = useState<PurchaseOrder[]>([]);
+
+  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly');
 
 
   useEffect(() => {
+    // Sales calculations
     const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
-    
     const revenue = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
     setTotalRevenue(revenue);
     setTotalOrders(completedOrders.length);
@@ -58,18 +72,17 @@ export default function ReportsPage() {
     const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
     const currentMonthIndex = new Date().getMonth();
     const salesData: MonthlySalesData[] = Array(6).fill(null).map((_, i) => {
-        const monthIndex = (currentMonthIndex - 5 + i + 12) % 12; // Ensure positive index
+        const monthIndex = (currentMonthIndex - 5 + i + 12) % 12;
         const monthName = monthsAr[monthIndex];
         const salesForMonth = DUMMY_ORDERS
             .filter(o => o.status === 'مكتمل' && new Date(o.createdAt).getMonth() === monthIndex)
             .reduce((sum, order) => sum + order.totalAmount, 0);
         return {
             month: monthName,
-            sales: salesForMonth > 0 ? salesForMonth : Math.floor(Math.random() * 1000) + 500, // Dummy fallback if no real sales
+            sales: salesForMonth > 0 ? salesForMonth : Math.floor(Math.random() * 1500) + 500, 
         };
     });
     setMonthlySales(salesData);
-
 
     const catSales: { [key in Category]?: number } = {};
     completedOrders.forEach(order => {
@@ -108,6 +121,16 @@ export default function ReportsPage() {
         .slice(0,5);
     setTopItems(sortedTopItems);
 
+    // Expenses Calculations
+    const salaries = DUMMY_EMPLOYEES.reduce((sum, emp) => sum + (emp.salary || 0), 0);
+    setTotalSalariesPaid(salaries); // Assuming monthly salaries for this placeholder
+    const poAmount = DUMMY_PURCHASE_ORDERS.reduce((sum, po) => sum + po.totalAmount, 0);
+    setTotalPurchaseAmount(poAmount);
+    setTotalExpenses(salaries + poAmount);
+    
+    // Financial Placeholder Calculations
+    setNetCashFlow(revenue - (salaries + poAmount)); // Simplified net cash flow
+
     // Inventory Reports
     setTotalIngredients(DUMMY_INGREDIENTS.length);
     const lowStock = DUMMY_INGREDIENTS.filter(ing => ing.lowStockThreshold !== undefined && ing.stockQuantity < ing.lowStockThreshold);
@@ -115,13 +138,10 @@ export default function ReportsPage() {
     setLowStockItemsList(lowStock);
 
     // Purchase Order Reports
-    setTotalPurchaseOrders(DUMMY_PURCHASE_ORDERS.length);
-    const poAmount = DUMMY_PURCHASE_ORDERS.reduce((sum, po) => sum + po.totalAmount, 0);
-    setTotalPurchaseAmount(poAmount);
+    setTotalPurchaseOrdersCount(DUMMY_PURCHASE_ORDERS.length);
     setRecentPurchaseOrders(DUMMY_PURCHASE_ORDERS.slice(0, 5).sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()));
 
-
-  }, []);
+  }, [selectedPeriod]); // Re-calculate if period changes, though dummy data won't reflect it accurately
   
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -138,6 +158,12 @@ export default function ReportsPage() {
     }
   };
 
+  const handlePeriodChange = (value: string) => {
+    setSelectedPeriod(value as ReportPeriod);
+    // In a real app, this would trigger re-fetching or re-calculating data
+    // based on the selected period. For now, it just updates the state.
+  };
+
 
   if (!isClient) {
     return (
@@ -150,12 +176,35 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader title="التقارير" description="حلل أداء مشروعك بالكامل." icon={BarChart3} />
+      <PageHeader 
+        title="التقارير" 
+        description="حلل أداء مشروعك بالكامل." 
+        icon={BarChart3}
+        actions={
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-muted-foreground" />
+            <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="اختر الفترة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">يومي (هذا اليوم)</SelectItem>
+                <SelectItem value="weekly">أسبوعي (هذا الأسبوع)</SelectItem>
+                <SelectItem value="monthly">شهري (هذا الشهر)</SelectItem>
+                <SelectItem value="quarterly">ربع سنوي (هذا الربع)</SelectItem>
+                <SelectItem value="semi_annually">نصف سنوي</SelectItem>
+                <SelectItem value="annually">سنوي</SelectItem>
+                <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      />
 
       {/* Sales Summary Cards */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="text-xl">ملخص المبيعات</CardTitle>
+            <CardTitle className="text-xl">ملخص المبيعات ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card className="shadow-md">
@@ -191,6 +240,77 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
       
+      {/* Expenses Summary Cards */}
+      <Card className="mb-8 shadow-lg">
+        <CardHeader>
+            <CardTitle className="text-xl">ملخص المصروفات ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">إجمالي الرواتب</CardTitle>
+                <Users className="h-5 w-5 text-destructive" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">${totalSalariesPaid.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">إجمالي الرواتب المدفوعة</p>
+            </CardContent>
+            </Card>
+            <Card className="shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">تكلفة المشتريات</CardTitle>
+                <Package className="h-5 w-5 text-destructive" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">${totalPurchaseAmount.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">إجمالي تكلفة أوامر الشراء</p>
+            </CardContent>
+            </Card>
+            <Card className="shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">إجمالي المصروفات</CardTitle>
+                <TrendingDown className="h-5 w-5 text-destructive" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">${totalExpenses.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">الرواتب + المشتريات</p>
+            </CardContent>
+            </Card>
+        </CardContent>
+      </Card>
+
+      {/* Financial Reports Cards */}
+      <Card className="mb-8 shadow-lg">
+        <CardHeader>
+            <CardTitle className="text-xl">التقارير المالية ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+            <Card className="shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">رصيد الخزنة الحالي</CardTitle>
+                <Wallet className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">${currentTreasuryBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">تقديري بناءً على آخر البيانات</p>
+            </CardContent>
+            </Card>
+            <Card className="shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">صافي التدفق النقدي</CardTitle>
+                {netCashFlow >= 0 ? <TrendingUp className="h-5 w-5 text-green-500" /> : <TrendingDown className="h-5 w-5 text-red-500" />}
+            </CardHeader>
+            <CardContent>
+                <div className={`text-2xl font-bold ${netCashFlow >=0 ? 'text-green-600' : 'text-red-600'}`}>
+                    ${netCashFlow.toFixed(2)}
+                </div>
+                <p className="text-xs text-muted-foreground">الإيرادات - المصروفات (تقديري)</p>
+            </CardContent>
+            </Card>
+        </CardContent>
+      </Card>
+
+
       {/* Sales Charts */}
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 mb-8">
         <Card className="shadow-lg col-span-1 lg:col-span-2">
@@ -272,7 +392,7 @@ export default function ReportsPage() {
                   stroke="hsl(var(--border))"
                 >
                   {orderTypeSales.map((entry, index) => (
-                    <Cell key={`cell-type-${index}`} fill={COLORS[(index + categorySales.length) % COLORS.length]} /> // Offset colors
+                    <Cell key={`cell-type-${index}`} fill={COLORS[(index + categorySales.length) % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -287,7 +407,6 @@ export default function ReportsPage() {
         </Card>
       </div>
 
-      {/* Top Selling Items */}
        <Card className="mb-8 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Utensils className="h-6 w-6 text-primary"/>العناصر الأكثر مبيعًا</CardTitle>
@@ -317,7 +436,6 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* Inventory Reports */}
         <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 mb-8">
             <Card className="shadow-lg">
                 <CardHeader>
@@ -371,7 +489,7 @@ export default function ReportsPage() {
                 <CardContent className="grid grid-cols-2 gap-4">
                     <div>
                         <p className="text-sm text-muted-foreground">إجمالي أوامر الشراء</p>
-                        <p className="text-2xl font-bold">{totalPurchaseOrders}</p>
+                        <p className="text-2xl font-bold">{totalPurchaseOrdersCount}</p>
                     </div>
                     <div>
                         <p className="text-sm text-muted-foreground">التكلفة الإجمالية للمشتريات</p>
@@ -381,7 +499,6 @@ export default function ReportsPage() {
             </Card>
         </div>
         
-        {/* Purchase Orders Report */}
         <Card className="mb-8 shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary"/>أحدث أوامر الشراء</CardTitle>
@@ -418,7 +535,6 @@ export default function ReportsPage() {
                 )}
             </CardContent>
         </Card>
-        {/* Placeholder for Employee, Customer, Reviews Reports - Requires more data structures */}
         <Card className="mb-8 shadow-lg opacity-50">
              <CardHeader>
                 <CardTitle>تقارير إضافية (قريباً)</CardTitle>
@@ -430,9 +546,6 @@ export default function ReportsPage() {
                 </p>
             </CardContent>
         </Card>
-
-
     </>
   );
 }
-
