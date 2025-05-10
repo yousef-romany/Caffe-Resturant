@@ -17,8 +17,10 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:left-0 sm:right-auto sm:top-auto sm:flex-col md:max-w-[420px]", // Adjusted for RTL: sm:right-0 to sm:left-0, sm:right-auto
-      "rtl:sm:left-auto rtl:sm:right-0", // Specific RTL override
+      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:flex-col md:max-w-[420px]",
+      // Default LTR: bottom-0 right-0
+      // RTL: bottom-0 left-0
+      "sm:right-0 rtl:sm:right-auto rtl:sm:left-0",
       className
     )}
     {...props}
