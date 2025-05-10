@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -27,7 +28,7 @@ import {
 import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type Category } from '@/constants';
 import { PlusCircle, Edit, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
+import NextImage from 'next/image'; // Renamed to avoid conflict
 
 const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { imageUrl?: string } = {
   name: '',
@@ -65,7 +66,7 @@ export default function MenuPage() {
 
   const handleSubmit = () => {
     if (!newItemData.name || newItemData.price <= 0) {
-      toast({ title: "Error", description: "Name and a valid price are required.", variant: "destructive" });
+      toast({ title: "خطأ", description: "الاسم وسعر صالح مطلوبان.", variant: "destructive" });
       return;
     }
 
@@ -75,7 +76,7 @@ export default function MenuPage() {
     if (editingItem) {
       const updatedItem = { ...editingItem, ...newItemData, imageUrl: newImageUrl, dataAiHint: newAiHint };
       setMenuItems(menuItems.map(item => item.id === editingItem.id ? updatedItem : item));
-      toast({ title: "Success", description: `${updatedItem.name} updated.` });
+      toast({ title: "نجاح", description: `تم تحديث ${updatedItem.name}.` });
     } else {
       const newItemWithId: MenuItem = {
         ...newItemData,
@@ -84,7 +85,7 @@ export default function MenuPage() {
         dataAiHint: newAiHint,
       };
       setMenuItems([newItemWithId, ...menuItems]);
-      toast({ title: "Success", description: `${newItemWithId.name} added to menu.` });
+      toast({ title: "نجاح", description: `تمت إضافة ${newItemWithId.name} إلى القائمة.` });
     }
     setIsDialogOpen(false);
     setEditingItem(null);
@@ -93,14 +94,14 @@ export default function MenuPage() {
 
   const handleEditItem = (item: MenuItem) => {
     setEditingItem(item);
-    setNewItemData({ ...item });
+    setNewItemData({ ...item }); // Use spread to include all properties, including optional ones like dataAiHint
     setIsDialogOpen(true);
   };
 
   const handleDeleteItem = (itemToDelete: MenuItem) => {
     // Add a confirmation dialog here in a real app
     setMenuItems(menuItems.filter(item => item.id !== itemToDelete.id));
-    toast({ title: "Success", description: `${itemToDelete.name} deleted.`, variant: "destructive" });
+    toast({ title: "نجاح", description: `تم حذف ${itemToDelete.name}.`, variant: "destructive" });
   };
 
   const openNewItemDialog = () => {
@@ -112,22 +113,22 @@ export default function MenuPage() {
   return (
     <>
       <PageHeader
-        title="Menu Management"
-        description="Add, edit, or remove menu items."
+        title="إدارة القائمة"
+        description="إضافة أو تعديل أو حذف عناصر القائمة."
         actions={
           <Button onClick={openNewItemDialog} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <PlusCircle className="h-5 w-5 mr-2" /> Add New Item
+            <PlusCircle className="h-5 w-5 me-2" /> إضافة عنصر جديد
           </Button>
         }
       />
       
       <div className="mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Search className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input 
             type="search"
-            placeholder="Search menu items..."
-            className="pl-10 w-full max-w-md"
+            placeholder="ابحث في عناصر القائمة..."
+            className="pe-10 w-full max-w-md"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -148,7 +149,7 @@ export default function MenuPage() {
         </div>
       ) : (
         <p className="text-center text-muted-foreground py-10">
-          {searchTerm ? "No items match your search." : "No menu items yet. Add one to get started!"}
+          {searchTerm ? "لا توجد عناصر تطابق بحثك." : "لا توجد عناصر في القائمة بعد. أضف واحدة للبدء!"}
         </p>
       )}
       
@@ -156,21 +157,21 @@ export default function MenuPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[525px]">
           <DialogHeader>
-            <DialogTitle>{editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}</DialogTitle>
+            <DialogTitle>{editingItem ? 'تعديل عنصر القائمة' : 'إضافة عنصر قائمة جديد'}</DialogTitle>
             <DialogDescription>
-              {editingItem ? 'Update the details of this menu item.' : 'Fill in the details for the new menu item.'}
+              {editingItem ? 'قم بتحديث تفاصيل عنصر القائمة هذا.' : 'املأ تفاصيل عنصر القائمة الجديد.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto ps-2">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">Name</Label>
+              <Label htmlFor="name" className="text-left">الاسم</Label>
               <Input id="name" name="name" value={newItemData.name} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="category" className="text-right">Category</Label>
+              <Label htmlFor="category" className="text-left">الفئة</Label>
               <Select name="category" value={newItemData.category} onValueChange={handleCategoryChange}>
                 <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="اختر الفئة" />
                 </SelectTrigger>
                 <SelectContent>
                   {ITEM_CATEGORIES.map(cat => (
@@ -180,35 +181,35 @@ export default function MenuPage() {
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="price" className="text-right">Price ($)</Label>
+              <Label htmlFor="price" className="text-left">السعر ($)</Label>
               <Input id="price" name="price" type="number" value={newItemData.price} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-right">Description</Label>
+              <Label htmlFor="description" className="text-left">الوصف</Label>
               <Textarea id="description" name="description" value={newItemData.description} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="imageUrl" className="text-right">Image URL</Label>
-              <Input id="imageUrl" name="imageUrl" value={newItemData.imageUrl || ''} onChange={handleInputChange} className="col-span-3" placeholder="Optional, e.g., https://picsum.photos/200/200"/>
+              <Label htmlFor="imageUrl" className="text-left">رابط الصورة</Label>
+              <Input id="imageUrl" name="imageUrl" value={newItemData.imageUrl || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري، مثال: https://picsum.photos/200/200"/>
             </div>
             {newItemData.imageUrl && (
               <div className="grid grid-cols-4 items-center gap-4">
                 <div className="col-start-2 col-span-3">
-                  <Image src={newItemData.imageUrl} alt="Preview" width={80} height={80} className="rounded-md object-cover" data-ai-hint={newItemData.dataAiHint || "item preview"}/>
+                  <NextImage src={newItemData.imageUrl} alt="معاينة" width={80} height={80} className="rounded-md object-cover" data-ai-hint={newItemData.dataAiHint || "item preview"}/>
                 </div>
               </div>
             )}
              <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="dataAiHint" className="text-right">AI Hint</Label>
-              <Input id="dataAiHint" name="dataAiHint" value={newItemData.dataAiHint || ''} onChange={handleInputChange} className="col-span-3" placeholder="e.g., coffee cup, burger fries (max 2 words)"/>
+              <Label htmlFor="dataAiHint" className="text-left">تلميح للذكاء الاصطناعي</Label>
+              <Input id="dataAiHint" name="dataAiHint" value={newItemData.dataAiHint || ''} onChange={handleInputChange} className="col-span-3" placeholder="مثال: كوب قهوة، برجر بطاطس (كلمتان كحد أقصى)"/>
             </div>
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline">إلغاء</Button>
             </DialogClose>
             <Button type="submit" onClick={handleSubmit} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              {editingItem ? 'Save Changes' : 'Add Item'}
+              {editingItem ? 'حفظ التغييرات' : 'إضافة عنصر'}
             </Button>
           </DialogFooter>
         </DialogContent>

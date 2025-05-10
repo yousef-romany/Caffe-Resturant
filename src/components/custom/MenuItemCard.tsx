@@ -1,4 +1,4 @@
-import Image from 'next/image';
+import NextImage from 'next/image'; // Using NextImage as Image might conflict
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { MenuItem } from '@/constants';
@@ -16,7 +16,7 @@ export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'd
   return (
     <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
       <CardHeader className="p-0 relative">
-        <Image
+        <NextImage // Changed from Image to NextImage
           src={item.imageUrl}
           alt={item.name}
           width={300}
@@ -31,26 +31,26 @@ export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'd
           {item.description || item.category}
         </CardDescription>
         <div className="flex items-center text-primary font-semibold mt-2">
-          <DollarSign className="h-4 w-4 mr-1" />
+          <DollarSign className="h-4 w-4 me-1" /> {/* Changed mr-1 to me-1 for RTL */}
           <span>{item.price.toFixed(2)}</span>
         </div>
       </CardContent>
       <CardFooter className="p-4 border-t">
         {variant === 'display' && onAddToCart && (
           <Button onClick={() => onAddToCart(item)} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-            Add to Order
+            إضافة للطلب
           </Button>
         )}
         {variant === 'management' && (
           <div className="flex gap-2 w-full">
             {onEdit && (
               <Button variant="outline" size="sm" onClick={() => onEdit(item)} className="flex-1">
-                <Edit className="h-4 w-4 mr-2" /> Edit
+                <Edit className="h-4 w-4 me-2" /> تعديل
               </Button>
             )}
             {onDelete && (
               <Button variant="destructive" size="sm" onClick={() => onDelete(item)} className="flex-1">
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                <Trash2 className="h-4 w-4 me-2" /> حذف
               </Button>
             )}
           </div>

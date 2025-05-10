@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -34,6 +35,7 @@ type SidebarContext = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  side: "left" | "right" // Added side to context
 }
 
 const SidebarContext = React.createContext<SidebarContext | null>(null)
@@ -69,6 +71,8 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
+    const [currentSide, setCurrentSide] = React.useState<"left" | "right">("left");
+
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -115,6 +119,12 @@ const SidebarProvider = React.forwardRef<
     // We add a state so that we can do data-state="expanded" or "collapsed".
     // This makes it easier to style the sidebar with Tailwind classes.
     const state = open ? "expanded" : "collapsed"
+    
+    // Allow child Sidebar to set the side
+    const setContextSide = React.useCallback((side: "left" | "right") => {
+        setCurrentSide(side);
+    }, []);
+
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
@@ -125,8 +135,11 @@ const SidebarProvider = React.forwardRef<
         openMobile,
         setOpenMobile,
         toggleSidebar,
+        side: currentSide, // Provide currentSide in context
+        // @ts-ignore // Add setSide to context if needed, temp ignore
+        setSide: setContextSide 
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, currentSide, setContextSide]
     )
 
     return (
@@ -166,7 +179,7 @@ const Sidebar = React.forwardRef<
 >(
   (
     {
-      side = "left",
+      side = "left", // Default to left
       variant = "sidebar",
       collapsible = "offcanvas",
       className,
@@ -175,13 +188,23 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { isMobile, state, openMobile, setOpenMobile, setSide: setContextSideOptional } = useSidebar()
+    const setContextSide = setContextSideOptional as (s: "left" | "right") => void;
+
+
+    React.useEffect(() => {
+      if (setContextSide) {
+        setContextSide(side);
+      }
+    }, [side, setContextSide]);
+
 
     if (collapsible === "none") {
       return (
         <div
           className={cn(
             "flex h-full w-[--sidebar-width] flex-col bg-sidebar text-sidebar-foreground",
+            side === "right" ? "order-last" : "", // For RTL, ensure it's visually on the right if main content uses flex
             className
           )}
           ref={ref}
@@ -226,7 +249,6 @@ const Sidebar = React.forwardRef<
           className={cn(
             "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
             "group-data-[collapsible=offcanvas]:w-0",
-            "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
               ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
@@ -241,7 +263,8 @@ const Sidebar = React.forwardRef<
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
+            side === 'left' ? 'group-data-[variant!=floating][variant!=inset]:border-r' : 'group-data-[variant!=floating][variant!=inset]:border-l',
             className
           )}
           {...props}
@@ -300,7 +323,7 @@ const SidebarRail = React.forwardRef<
       onClick={toggleSidebar}
       title="Toggle Sidebar"
       className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
+        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:-left-4 sm:flex", // Adjusted -right-4 to -left-4 for group-data-[side=right]
         "[[data-side=left]_&]:cursor-w-resize [[data-side=right]_&]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full group-data-[collapsible=offcanvas]:hover:bg-sidebar",
@@ -318,12 +341,17 @@ const SidebarInset = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
+  const { side } = useSidebar();
   return (
     <main
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background",
-        "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
+        "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))]",
+        "md:peer-data-[variant=inset]:m-2",
+        side === "left" ? "md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2" : "md:peer-data-[state=collapsed]:peer-data-[variant=inset]:mr-2",
+        side === "left" ? "md:peer-data-[variant=inset]:ml-0" : "md:peer-data-[variant=inset]:mr-0",
+        "md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
       {...props}
@@ -554,7 +582,7 @@ const SidebarMenuButton = React.forwardRef<
     ref
   ) => {
     const Comp = asChild ? Slot : "button"
-    const { isMobile, state } = useSidebar()
+    const { isMobile, state, side } = useSidebar()
 
     const button = (
       <Comp
@@ -581,7 +609,7 @@ const SidebarMenuButton = React.forwardRef<
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent
-          side="right"
+          side={side === "left" ? "right" : "left"} // Adjust tooltip side based on sidebar side
           align="center"
           hidden={state !== "collapsed" || isMobile}
           {...tooltip}
@@ -690,7 +718,7 @@ const SidebarMenuSub = React.forwardRef<
     ref={ref}
     data-sidebar="menu-sub"
     className={cn(
-      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5",
+      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5", // Use border-l for LTR, will be border-r in RTL
       "group-data-[collapsible=icon]:hidden",
       className
     )}

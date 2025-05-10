@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -27,7 +28,7 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border shadow-sm">
+      <Sidebar collapsible="icon" side="right" className="border-l border-r-0 border-sidebar-border shadow-sm">
         <SidebarHeader className="p-4">
           <AppLogo />
         </SidebarHeader>
@@ -58,7 +59,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
              {/* Optionally, show a condensed logo on mobile header if needed */}
              {/* <AppLogo />  */}
           </div>
-          <div className="flex flex-1 items-center justify-end gap-4">
+          <div className="flex flex-1 items-center justify-start gap-4"> {/* Changed to justify-start for RTL */}
             <ThemeToggle />
             <UserNav />
           </div>

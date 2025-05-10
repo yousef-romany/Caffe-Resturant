@@ -1,11 +1,13 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, Order, OrderStatus } from '@/constants';
+import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, Order, OrderStatus, Category } from '@/constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, ShoppingBag, Utensils } from 'lucide-react';
+import { arSA } from 'date-fns/locale'; // Arabic locale
 
 // Helper to generate random colors for Pie chart
 const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC']; // Shades of Emerald Green
@@ -16,7 +18,7 @@ interface MonthlySalesData {
 }
 
 interface CategorySalesData {
-  name: string;
+  name: Category; // Use Category type for consistency
   value: number;
 }
 
@@ -30,7 +32,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     // Simulate data processing
-    const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'Completed');
+    const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
     
     // Total Revenue & Orders
     const revenue = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
@@ -39,7 +41,8 @@ export default function ReportsPage() {
     setAverageOrderValue(completedOrders.length > 0 ? revenue / completedOrders.length : 0);
 
     // Monthly Sales (dummy data for past 6 months)
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]; // Replace with actual date logic
+    // Translated months for display. Actual date logic would use date-fns with arSA locale.
+    const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"]; 
     const salesData: MonthlySalesData[] = months.map(month => ({
       month,
       sales: Math.floor(Math.random() * 5000) + 1000,
@@ -47,13 +50,16 @@ export default function ReportsPage() {
     setMonthlySales(salesData);
 
     // Sales by Category
-    const catSales: { [key: string]: number } = {};
+    const catSales: { [key in Category]?: number } = {};
     completedOrders.forEach(order => {
       order.items.forEach(item => {
         catSales[item.category] = (catSales[item.category] || 0) + (item.price * item.quantity);
       });
     });
-    setCategorySales(Object.entries(catSales).map(([name, value]) => ({ name, value })));
+    setCategorySales(
+        (Object.entries(catSales) as [Category, number][])
+        .map(([name, value]) => ({ name, value }))
+    );
     
     // Top Selling Items
     const itemSales: { [key: string]: { name: string; sales: number } } = {};
@@ -82,45 +88,45 @@ export default function ReportsPage() {
   if (!isClient) {
     return (
       <>
-        <PageHeader title="Sales Reports" description="Analyze your sales performance." />
-        <p>Loading reports...</p>
+        <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." />
+        <p>جارٍ تحميل التقارير...</p>
       </>
     );
   }
 
   return (
     <>
-      <PageHeader title="Sales Reports" description="Analyze your sales performance." />
+      <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
             <DollarSign className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Across all completed orders</p>
+            <p className="text-xs text-muted-foreground">لجميع الطلبات المكتملة</p>
           </CardContent>
         </Card>
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <CardTitle className="text-sm font-medium">إجمالي الطلبات</CardTitle>
             <ShoppingBag className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalOrders}</div>
-            <p className="text-xs text-muted-foreground">Completed orders</p>
+            <p className="text-xs text-muted-foreground">الطلبات المكتملة</p>
           </CardContent>
         </Card>
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Order Value</CardTitle>
+            <CardTitle className="text-sm font-medium">متوسط قيمة الطلب</CardTitle>
             <DollarSign className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${averageOrderValue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Average per completed order</p>
+            <p className="text-xs text-muted-foreground">متوسط كل طلب مكتمل</p>
           </CardContent>
         </Card>
       </div>
@@ -128,22 +134,22 @@ export default function ReportsPage() {
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 mb-8">
         <Card className="shadow-lg col-span-1 lg:col-span-2">
           <CardHeader>
-            <CardTitle>Monthly Sales Overview</CardTitle>
-            <CardDescription>Sales performance over the last 6 months.</CardDescription>
+            <CardTitle>نظرة عامة على المبيعات الشهرية</CardTitle>
+            <CardDescription>أداء المبيعات خلال آخر 6 أشهر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlySales}>
+              <BarChart data={monthlySales} layout="horizontal" margin={{ right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${value}`} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${value}`} orientation="right" />
                 <Tooltip
                   contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                   itemStyle={{ color: 'hsl(var(--primary))' }}
                 />
-                <Legend wrapperStyle={{ fontSize: '12px' }}/>
-                <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
+                <Bar dataKey="sales" name="المبيعات" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -151,8 +157,8 @@ export default function ReportsPage() {
         
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Sales by Category</CardTitle>
-            <CardDescription>Revenue distribution across item categories.</CardDescription>
+            <CardTitle>المبيعات حسب الفئة</CardTitle>
+            <CardDescription>توزيع الإيرادات عبر فئات العناصر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -178,7 +184,7 @@ export default function ReportsPage() {
                   labelStyle={{ color: 'hsl(var(--foreground))' }}
                   formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
                 />
-                <Legend wrapperStyle={{ fontSize: '12px' }}/>
+                <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -186,8 +192,8 @@ export default function ReportsPage() {
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Top Selling Items</CardTitle>
-            <CardDescription>Most popular items by revenue.</CardDescription>
+            <CardTitle>العناصر الأكثر مبيعًا</CardTitle>
+            <CardDescription>العناصر الأكثر شيوعًا حسب الإيرادات.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">

@@ -18,15 +18,15 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-9 w-9 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src="https://picsum.photos/40/40" alt="User Avatar" data-ai-hint="user avatar" />
-            <AvatarFallback>U</AvatarFallback>
+            <AvatarImage src="https://picsum.photos/40/40" alt="صورة المستخدم" data-ai-hint="user avatar" />
+            <AvatarFallback>م</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">User Name</p>
+            <p className="text-sm font-medium leading-none">اسم المستخدم</p>
             <p className="text-xs leading-none text-muted-foreground">
               user@example.com
             </p>
@@ -35,22 +35,22 @@ export function UserNav() {
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href="/settings/profile">
-              <UserIcon className="mr-2 h-4 w-4" />
-              <span>Profile</span>
+            <Link href="/settings/profile"> {/* Assuming /settings/profile route exists or will be created */}
+              <UserIcon className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+              <span>الملف الشخصي</span>
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/settings">
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
+              <Settings className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+              <span>الإعدادات</span>
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
+          <LogOut className="ms-2 h-4 w-4" /> {/* Changed mr-2 to ms-2 for RTL */}
+          <span>تسجيل الخروج</span>
           {/* Add logout functionality here */}
         </DropdownMenuItem>
       </DropdownMenuContent>

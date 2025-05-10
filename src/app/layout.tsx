@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Cafe POS Express',
-  description: 'Restaurant and Cafe POS System',
+  title: 'كافيه بوس إكسبريس',
+  description: 'نظام نقاط البيع للمطاعم والمقاهي',
 };
 
 export default function RootLayout({
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className={`${inter.variable} antialiased`}>
         <ThemeProvider
           attribute="class"

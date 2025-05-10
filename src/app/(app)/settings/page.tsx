@@ -8,29 +8,29 @@ import { Separator } from '@/components/ui/separator';
 export default function SettingsPage() {
   return (
     <>
-      <PageHeader title="Settings" description="Manage your application settings." />
+      <PageHeader title="الإعدادات" description="إدارة إعدادات التطبيق الخاص بك." />
       <div className="space-y-8">
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Store Information</CardTitle>
-            <CardDescription>Update your cafe or restaurant details.</CardDescription>
+            <CardTitle>معلومات المتجر</CardTitle>
+            <CardDescription>تحديث تفاصيل المقهى أو المطعم الخاص بك.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="storeName">Store Name</Label>
-                <Input id="storeName" defaultValue="Cafe POS Express" className="mt-1" />
+                <Label htmlFor="storeName">اسم المتجر</Label>
+                <Input id="storeName" defaultValue="كافيه بوس إكسبريس" className="mt-1" />
               </div>
               <div>
-                <Label htmlFor="storeAddress">Address</Label>
-                <Input id="storeAddress" defaultValue="123 Main Street, Anytown" className="mt-1" />
+                <Label htmlFor="storeAddress">العنوان</Label>
+                <Input id="storeAddress" defaultValue="123 الشارع الرئيسي, أي مدينة" className="mt-1" />
               </div>
             </div>
             <div>
-              <Label htmlFor="storeContact">Contact Phone</Label>
+              <Label htmlFor="storeContact">هاتف الاتصال</Label>
               <Input id="storeContact" defaultValue="+1 (555) 123-4567" className="mt-1" />
             </div>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">Save Store Info</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">حفظ معلومات المتجر</Button>
           </CardContent>
         </Card>
 
@@ -38,25 +38,25 @@ export default function SettingsPage() {
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Account Settings</CardTitle>
-            <CardDescription>Manage your personal account details.</CardDescription>
+            <CardTitle>إعدادات الحساب</CardTitle>
+            <CardDescription>إدارة تفاصيل حسابك الشخصي.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="userName">Your Name</Label>
-                  <Input id="userName" defaultValue="Admin User" className="mt-1" />
+                  <Label htmlFor="userName">اسمك</Label>
+                  <Input id="userName" defaultValue="المسؤول" className="mt-1" />
                 </div>
                 <div>
-                  <Label htmlFor="userEmail">Email</Label>
+                  <Label htmlFor="userEmail">البريد الإلكتروني</Label>
                   <Input id="userEmail" type="email" defaultValue="admin@example.com" className="mt-1" />
                 </div>
             </div>
             <div>
-              <Label htmlFor="userPassword">Change Password</Label>
-              <Input id="userPassword" type="password" placeholder="New Password" className="mt-1" />
+              <Label htmlFor="userPassword">تغيير كلمة المرور</Label>
+              <Input id="userPassword" type="password" placeholder="كلمة المرور الجديدة" className="mt-1" />
             </div>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">Update Account</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">تحديث الحساب</Button>
           </CardContent>
         </Card>
 
@@ -64,19 +64,19 @@ export default function SettingsPage() {
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Printer Settings</CardTitle>
-            <CardDescription>Configure your receipt and kitchen printers (UI Placeholder).</CardDescription>
+            <CardTitle>إعدادات الطابعة</CardTitle>
+            <CardDescription>تكوين طابعات الإيصالات والمطبخ (واجهة مستخدم مبدئية).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-                <Label htmlFor="receiptPrinter">Receipt Printer</Label>
-                <Input id="receiptPrinter" defaultValue="Thermal Printer (USB)" className="mt-1" disabled/>
+                <Label htmlFor="receiptPrinter">طابعة الإيصالات</Label>
+                <Input id="receiptPrinter" defaultValue="طابعة حرارية (USB)" className="mt-1" disabled/>
             </div>
             <div>
-                <Label htmlFor="kitchenPrinter">Kitchen Printer</Label>
-                <Input id="kitchenPrinter" defaultValue="Network Printer (LAN)" className="mt-1" disabled/>
+                <Label htmlFor="kitchenPrinter">طابعة المطبخ</Label>
+                <Input id="kitchenPrinter" defaultValue="طابعة شبكة (LAN)" className="mt-1" disabled/>
             </div>
-            <Button disabled className="bg-primary hover:bg-primary/90 text-primary-foreground">Configure Printers</Button>
+            <Button disabled className="bg-primary hover:bg-primary/90 text-primary-foreground">تكوين الطابعات</Button>
           </CardContent>
         </Card>
       </div>
