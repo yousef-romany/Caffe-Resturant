@@ -114,42 +114,135 @@ body {
 }
 
 @media print {
+  body {
+    -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
+    print-color-adjust: exact !important; /* Firefox, Edge */
+  }
   body > *:not(.printable-area) {
     display: none !important;
   }
-  .printable-area { /* This class is applied to DialogContent for the invoice */
+  .printable-area {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    max-width: 100% !important; /* Override sm:max-w-lg */
+    max-width: 100% !important;
     height: auto !important;
-    max-height: none !important; /* Override max-h-[60vh] */
+    max-height: none !important;
     overflow: visible !important;
     border: none !important;
     box-shadow: none !important;
-    padding: 20px !important; /* Adjust as needed for print layout */
-    background-color: white !important; /* Ensure printable background */
-    color: black !important; /* Ensure printable text */
+    padding: 20px !important;
+    background-color: white !important;
+    color: black !important;
   }
-  .printable-area .printable-invoice-content { /* The inner content div */
-     /* Add any specific styles for the content itself if needed */
+  .printable-area .printable-invoice-content {
+    font-family: 'Arial', sans-serif;
+    color: #000;
   }
-  .printable-area .no-print { /* For elements like DialogFooter and buttons inside it */
+  .printable-area .printable-invoice-content .dialog-title-print {
+    font-size: 1.5rem; /* 24px */
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    color: #000;
+  }
+   .printable-area .printable-invoice-content .dialog-description-print {
+    font-size: 0.875rem; /* 14px */
+    text-align: center;
+    margin-bottom: 1rem;
+    color: #333;
+  }
+  .printable-area .printable-invoice-content p {
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+    color: #000;
+  }
+  .printable-area .printable-invoice-content strong {
+    font-weight: bold;
+    color: #000;
+  }
+  .printable-area .printable-invoice-content ul.invoice-items-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+  }
+  .printable-area .printable-invoice-content li.item-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed #ccc;
+    color: #000;
+  }
+   .printable-area .printable-invoice-content li.item-row:last-child {
+    border-bottom: 1px solid #000; /* Solid line for the last item */
+  }
+  .printable-area .printable-invoice-content .item-details {
+    flex-grow: 1;
+  }
+  .printable-area .printable-invoice-content .item-name-print {
+    font-weight: bold;
+  }
+  .printable-area .printable-invoice-content .item-meta-print {
+    font-size: 0.8rem;
+    color: #444;
+  }
+  .printable-area .printable-invoice-content .item-notes-print {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: #555;
+    margin-inline-start: 1rem; /* RTL aware */
+  }
+  .printable-area .printable-invoice-content .item-total-price {
+    text-align: end; /* RTL aware */
+    font-weight: bold;
+    min-width: 60px; /* Ensure some space for price */
+  }
+
+  .printable-area .printable-invoice-content .invoice-summary {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid #000;
+  }
+  .printable-area .printable-invoice-content .summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    padding: 0.1rem 0;
+  }
+  .printable-area .printable-invoice-content .summary-row.total {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #000;
+  }
+  .printable-area .printable-invoice-content img {
+    display: none !important; /* Hide images in print by default for cleaner invoice */
+  }
+  .printable-area .no-print {
     display: none !important;
   }
-   /* Hide the X close button of the dialog */
-  .printable-area > button[class*="absolute"] { /* Targets the X button if it's a direct child and absolutely positioned */
+  .printable-area > button[class*="absolute"] { /* Hides the X button */
      display: none !important;
   }
-  /* Ensure images print */
-  .printable-area img {
-    max-width: 100% !important; /* Prevent images from overflowing */
-  }
-  /* Adjust scroll areas for printing */
-  .printable-area .overflow-y-auto {
+  .printable-area .overflow-y-auto { /* Ensure content is not cut off */
     overflow-y: visible !important;
     max-height: none !important;
+  }
+  .printable-area .badge-print { /* Basic badge styling for print */
+    display: inline-block;
+    padding: 0.1em 0.4em;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+    border: 1px solid #000;
+    background-color: #eee !important; /* Important to override screen styles */
+    color: #000 !important;
   }
 }

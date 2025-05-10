@@ -36,6 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Badge } from '@/components/ui/badge'; // Added Badge import
 
 const invoiceLabels = {
   ar: {
@@ -710,22 +711,16 @@ export default function POSPage() {
           <DialogContent className="sm:max-w-lg printable-area" dir={invoiceLanguage === 'en' ? 'ltr' : 'rtl'}>
             <div className="printable-invoice-content">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Receipt className="h-6 w-6 text-primary"/>
+                 <h1 className="dialog-title-print"> {/* Added class for print styling */}
+                  <Receipt className="h-6 w-6 text-primary inline me-2"/>
                   {currentLabels.invoiceTitle}: {confirmedOrder.orderNumber}
-                </DialogTitle>
-                <DialogDescription>
+                 </h1>
+                <p className="dialog-description-print"> {/* Added class for print styling */}
                   {currentLabels.date}: {format(new Date(confirmedOrder.createdAt), 'PPpp', { locale: invoiceLanguage === 'ar' ? arSA : enUS })}
-                </DialogDescription>
+                </p>
               </DialogHeader>
               <div className="mt-4 max-h-[60vh] overflow-y-auto ps-2 space-y-4">
-                <p><strong>{currentLabels.status}:</strong> <span className={`px-2 py-0.5 rounded-full text-xs ${
-                    confirmedOrder.status === 'مكتمل' ? 'bg-green-100 text-green-700' : 
-                    confirmedOrder.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
-                    confirmedOrder.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
-                    confirmedOrder.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
-                    'bg-red-100 text-red-700' 
-                  }`}>{currentLabels.statusText[confirmedOrder.status]}</span></p>
+                <p><strong>{currentLabels.status}:</strong> <Badge variant={confirmedOrder.status === 'مكتمل' ? 'default' : confirmedOrder.status === 'ملغى' ? 'destructive' : 'secondary'} className="badge-print">{currentLabels.statusText[confirmedOrder.status]}</Badge></p>
                 <p><strong>{currentLabels.type}:</strong> {confirmedOrder.type}</p>
                 {confirmedOrder.type === 'صالة' && confirmedOrder.tableNumber && <p><strong>{currentLabels.table}:</strong> {confirmedOrder.tableNumber}</p>}
                 {confirmedOrder.customerName && <p><strong>{currentLabels.customer}:</strong> {confirmedOrder.customerName}</p>}
@@ -733,42 +728,41 @@ export default function POSPage() {
                 {confirmedOrder.notes && <p><strong>{currentLabels.orderNotes}:</strong> {confirmedOrder.notes}</p>}
                 
                 <h4 className="font-semibold mt-4">{currentLabels.items}:</h4>
-                <ul className="space-y-2">
+                <ul className="space-y-2 invoice-items-list">
                   {confirmedOrder.items.map((item, idx) => (
-                    <li key={`${item.id}-${idx}`} className="flex items-start gap-3 p-2 border rounded-md">
-                      <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover" data-ai-hint={item.dataAiHint || "food item"}/>
-                      <div className="flex-grow">
-                        <p className="font-medium">{item.name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
-                        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} {currentLabels.pricePerItem}</p>
-                        {item.notes && <p className="text-xs text-blue-600 italic">{currentLabels.itemNotes}: {item.notes}</p>}
+                    <li key={`${item.id}-${idx}`} className="item-row">
+                      <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover no-print" data-ai-hint={item.dataAiHint || "food item"}/>
+                      <div className="item-details">
+                        <p className="item-name-print">{item.name}</p>
+                        <p className="item-meta-print">{currentLabels.quantity}: {item.quantity} &nbsp;|&nbsp; ${item.price.toFixed(2)} {currentLabels.pricePerItem}</p>
+                        {item.notes && <p className="item-notes-print">{currentLabels.itemNotes}: {item.notes}</p>}
                       </div>
-                      <p className="font-medium text-sm">${(item.price * item.quantity).toFixed(2)}</p>
+                      <p className="item-total-price">${(item.price * item.quantity).toFixed(2)}</p>
                     </li>
                   ))}
                 </ul>
-                <Separator className="my-3"/>
-                <div className="space-y-1 text-sm">
-                  <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                
+                <div className="invoice-summary">
+                  <div className="summary-row">
                     <p>{currentLabels.subtotal}:</p>
                     <p>${(confirmedOrder.subtotal ?? 0).toFixed(2)}</p>
                   </div>
                   {confirmedOrder.discountAmount && confirmedOrder.discountAmount > 0 && (
-                    <div className={`flex items-center text-destructive ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                    <div className="summary-row">
                        <p>{currentLabels.discount} ({confirmedOrder.discountPercentage || 0}%):</p>
                        <p>-${confirmedOrder.discountAmount.toFixed(2)}</p>
                     </div>
                   )}
                   {confirmedOrder.vatAmount && confirmedOrder.vatAmount > 0 && (
-                     <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                     <div className="summary-row">
                        <p>{currentLabels.vat}:</p>
                        <p>+${confirmedOrder.vatAmount.toFixed(2)}</p>
                     </div>
                   )}
-                </div>
-                <Separator className="my-3"/>
-                <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
-                  <p className="text-lg font-bold">{currentLabels.total}:</p>
-                  <p className="text-lg font-bold">${confirmedOrder.totalAmount.toFixed(2)}</p>
+                  <div className="summary-row total">
+                    <p>{currentLabels.total}:</p>
+                    <p>${confirmedOrder.totalAmount.toFixed(2)}</p>
+                  </div>
                 </div>
               </div>
             </div>
