@@ -1,11 +1,12 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText } from 'lucide-react';
 
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  children?: NavItem[];
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -14,12 +15,35 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   { label: 'شاشة المطبخ', href: '/kitchen', icon: ChefHat },
   { label: 'الطاولات', href: '/tables', icon: TableIcon },
-  { label: 'المخزون', href: '/inventory', icon: Package },
+  {
+    label: 'المخزون',
+    href: '/inventory',
+    icon: Package,
+    children: [
+      { label: 'نظرة عامة', href: '/inventory', icon: FileText },
+      { label: 'المكونات', href: '/inventory/ingredients', icon: ShoppingBasket },
+      { label: 'الموردين', href: '/inventory/suppliers', icon: Users },
+      { label: 'أوامر الشراء', href: '/inventory/purchases', icon: ListChecks }, // Assuming this page will be enabled
+    ],
+  },
   { label: 'الموظفين', href: '/employees', icon: UsersRound },
   { label: 'العملاء', href: '/customers', icon: Award },
   { label: 'التقييمات', href: '/reviews', icon: MessageSquare },
-  { label: 'الطلبات', href: '/orders', icon: ListOrdered },
-  { label: 'التقارير', href: '/reports', icon: BarChart3 },
+  { label: 'سجل الطلبات', href: '/orders', icon: ListOrdered },
+  {
+    label: 'التقارير',
+    href: '/reports',
+    icon: BarChart3,
+    children: [
+      { label: 'نظرة عامة', href: '/reports', icon: FileText },
+      { label: 'المبيعات', href: '/reports/sales', icon: TrendingUp },
+      { label: 'المصروفات', href: '/reports/expenses', icon: TrendingDown },
+      { label: 'ملخص مالي', href: '/reports/financials', icon: Landmark },
+      { label: 'ملخص المخزون', href: '/reports/inventory-summary', icon: Archive },
+      { label: 'أوامر الشراء', href: '/reports/purchase-orders-summary', icon: ListChecks },
+      { label: 'الأكثر مبيعًا', href: '/reports/top-selling', icon: Flame },
+    ],
+  },
 ];
 
 export const SETTINGS_NAV_ITEM: NavItem = { label: 'الإعدادات', href: '/settings', icon: Settings };

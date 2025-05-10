@@ -54,10 +54,11 @@ export default function InventoryPage() {
               <ListChecks className="h-8 w-8 text-primary" />
               <CardTitle className="text-xl">أوامر الشراء</CardTitle>
             </div>
-            <CardDescription>إنشاء وتتبع أوامر الشراء من الموردين (قريباً).</CardDescription>
+            <CardDescription>إنشاء وتتبع أوامر الشراء من الموردين.</CardDescription> 
           </CardHeader>
           <CardContent>
-            <Button disabled asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+             {/* Assuming /inventory/purchases will be the page for managing purchase orders */}
+            <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
               <Link href="/inventory/purchases"> 
                 عرض أوامر الشراء
               </Link>

@@ -2,6 +2,8 @@
 "use client";
 
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import {
   SidebarProvider,
   Sidebar,
@@ -14,18 +16,59 @@ import {
   SidebarTrigger,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { AppLogo } from '@/components/custom/AppLogo';
 import { NavLink } from '@/components/custom/NavLink';
 import { UserNav } from '@/components/custom/UserNav';
 import { ThemeToggle } from '@/components/custom/ThemeToggle';
-import { NAV_ITEMS, SETTINGS_NAV_ITEM } from '@/constants';
+import { NAV_ITEMS, SETTINGS_NAV_ITEM, type NavItem } from '@/constants';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const pathname = usePathname();
+
+  const renderNavItems = (items: NavItem[], isSubMenu = false) => {
+    return items.map((item) => {
+      if (item.children && item.children.length > 0) {
+        const isActiveGroup = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        return (
+          <AccordionItem value={item.label} key={item.label} className="border-b-0">
+            <AccordionTrigger
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:no-underline",
+                isActiveGroup && "bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="group-data-[collapsible=icon]:hidden flex-1">{item.label}</span>
+            </AccordionTrigger>
+            <AccordionContent className="pt-1 ps-3"> {/* Indent accordion content */}
+              <SidebarMenu>
+                {renderNavItems(item.children, true)}
+              </SidebarMenu>
+            </AccordionContent>
+          </AccordionItem>
+        );
+      }
+      return (
+        <SidebarMenuItem key={item.href}>
+          <NavLink href={item.href} icon={item.icon} label={item.label} />
+        </SidebarMenuItem>
+      );
+    });
+  };
+
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon" side="right" className="border-l border-r-0 border-sidebar-border shadow-sm">
@@ -34,13 +77,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </SidebarHeader>
         <ScrollArea className="flex-1">
           <SidebarContent>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <NavLink href={item.href} icon={item.icon} label={item.label} />
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <Accordion type="multiple" className="w-full">
+              {renderNavItems(NAV_ITEMS)}
+            </Accordion>
           </SidebarContent>
         </ScrollArea>
         <SidebarSeparator />
@@ -56,8 +95,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 shadow-sm backdrop-blur-md md:px-6">
           <div className="flex items-center gap-2 md:hidden">
             <SidebarTrigger />
-             {/* Optionally, show a condensed logo on mobile header if needed */}
-             {/* <AppLogo />  */}
           </div>
           <div className="flex flex-1 items-center justify-start gap-4"> {/* Changed to justify-start for RTL */}
             <ThemeToggle />
@@ -71,4 +108,3 @@ export default function AppLayout({ children }: AppLayoutProps) {
     </SidebarProvider>
   );
 }
-
