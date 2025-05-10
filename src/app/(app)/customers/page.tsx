@@ -73,7 +73,10 @@ export default function CustomersPage() {
     if (editingCustomer) {
       const updatedCustomer = { ...editingCustomer, ...customerDataToSave };
       setCustomers(customers.map(cust => cust.id === editingCustomer.id ? updatedCustomer : cust));
-      DUMMY_CUSTOMERS[DUMMY_CUSTOMERS.findIndex(c => c.id === editingCustomer.id)] = updatedCustomer;
+      const indexToUpdate = DUMMY_CUSTOMERS.findIndex(c => c.id === editingCustomer.id);
+      if (indexToUpdate !== -1) {
+        DUMMY_CUSTOMERS[indexToUpdate] = updatedCustomer;
+      }
       toast({ title: "نجاح", description: `تم تحديث بيانات العميل ${updatedCustomer.name}.` });
     } else {
       const newCustomerWithId: Customer = {
@@ -103,7 +106,10 @@ export default function CustomersPage() {
 
   const handleDeleteCustomer = (customerToDelete: Customer) => {
     setCustomers(customers.filter(cust => cust.id !== customerToDelete.id));
-    DUMMY_CUSTOMERS = DUMMY_CUSTOMERS.filter(c => c.id !== customerToDelete.id);
+    const indexToDelete = DUMMY_CUSTOMERS.findIndex(c => c.id === customerToDelete.id);
+    if (indexToDelete !== -1) {
+        DUMMY_CUSTOMERS.splice(indexToDelete, 1);
+    }
     toast({ title: "نجاح", description: `تم حذف العميل ${customerToDelete.name}.`, variant: "destructive" });
   };
 

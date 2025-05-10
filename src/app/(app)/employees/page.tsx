@@ -82,7 +82,10 @@ export default function EmployeesPage() {
     if (editingEmployee) {
       const updatedEmployee = { ...editingEmployee, ...employeeDataToSave };
       setEmployees(employees.map(emp => emp.id === editingEmployee.id ? updatedEmployee : emp));
-      DUMMY_EMPLOYEES[DUMMY_EMPLOYEES.findIndex(e => e.id === editingEmployee.id)] = updatedEmployee; // Update dummy data
+      const indexToUpdate = DUMMY_EMPLOYEES.findIndex(e => e.id === editingEmployee.id);
+      if (indexToUpdate !== -1) {
+        DUMMY_EMPLOYEES[indexToUpdate] = updatedEmployee; 
+      }
       toast({ title: "نجاح", description: `تم تحديث بيانات ${updatedEmployee.name}.` });
     } else {
       const newEmployeeWithId: Employee = {
@@ -90,7 +93,7 @@ export default function EmployeesPage() {
         id: `emp-${Date.now()}`,
       };
       setEmployees([newEmployeeWithId, ...employees]);
-      DUMMY_EMPLOYEES.unshift(newEmployeeWithId); // Update dummy data
+      DUMMY_EMPLOYEES.unshift(newEmployeeWithId); 
       toast({ title: "نجاح", description: `تمت إضافة الموظف ${newEmployeeWithId.name}.` });
     }
     setIsDialogOpen(false);
@@ -109,9 +112,11 @@ export default function EmployeesPage() {
   };
 
   const handleDeleteEmployee = (employeeToDelete: Employee) => {
-    // Add confirmation dialog in real app
     setEmployees(employees.filter(emp => emp.id !== employeeToDelete.id));
-    DUMMY_EMPLOYEES = DUMMY_EMPLOYEES.filter(e => e.id !== employeeToDelete.id); // Update dummy data
+    const indexToDelete = DUMMY_EMPLOYEES.findIndex(e => e.id === employeeToDelete.id);
+    if (indexToDelete !== -1) {
+        DUMMY_EMPLOYEES.splice(indexToDelete, 1);
+    }
     toast({ title: "نجاح", description: `تم حذف ${employeeToDelete.name}.`, variant: "destructive" });
   };
   
