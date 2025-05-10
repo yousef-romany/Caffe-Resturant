@@ -520,7 +520,7 @@ const SidebarMenu = React.forwardRef<
   <ul
     ref={ref}
     data-sidebar="menu"
-    className={cn("flex w-full min-w-0 flex-col gap-1", className)}
+    className={cn("flex w-full min-w-0 flex-col gap-1 list-none p-0", className)}
     {...props}
   />
 ))
@@ -718,7 +718,7 @@ const SidebarMenuSub = React.forwardRef<
     ref={ref}
     data-sidebar="menu-sub"
     className={cn(
-      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5", // Use border-l for LTR, will be border-r in RTL
+      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5 list-none p-0", // Use border-l for LTR, will be border-r in RTL. Added list-none and p-0
       "group-data-[collapsible=icon]:hidden",
       className
     )}
