@@ -14,10 +14,13 @@ interface MenuItemCardProps {
 }
 
 export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'display' }: MenuItemCardProps) {
+  const profit = typeof item.cost === 'number' && item.price > 0 ? item.price - item.cost : undefined;
+  const profitMargin = typeof profit === 'number' && item.price > 0 ? (profit / item.price) * 100 : undefined;
+
   return (
     <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
       <CardHeader className="p-0 relative">
-        <NextImage // Changed from Image to NextImage
+        <NextImage
           src={item.imageUrl}
           alt={item.name}
           width={300}
@@ -32,7 +35,7 @@ export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'd
           {item.description || item.category}
         </CardDescription>
         <div className="flex items-center text-primary font-semibold mt-2">
-          <DollarSign className="h-4 w-4 me-1" /> {/* Changed mr-1 to me-1 for RTL */}
+          <DollarSign className="h-4 w-4 me-1" />
           <span>{item.price.toFixed(2)}</span>
         </div>
         {variant === 'management' && typeof item.cost === 'number' && (
@@ -40,11 +43,11 @@ export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'd
             <p className="text-xs text-muted-foreground">
               التكلفة: ${item.cost.toFixed(2)}
             </p>
-            {item.price > 0 && (item.cost >= 0) && ( // Ensure cost is non-negative for meaningful profit calculation
-              <p className={`text-xs text-muted-foreground`}>
-                {item.price >= item.cost ? 'الربح: ' : 'الخسارة: '} 
-                ${(item.price - item.cost).toFixed(2)} 
-                &nbsp;({(((item.price - item.cost) / item.price) * 100).toFixed(0)}%)
+            {typeof profit === 'number' && typeof profitMargin === 'number' && (
+              <p className={`text-xs ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {profit >= 0 ? 'الربح: ' : 'الخسارة: '} 
+                ${profit.toFixed(2)} 
+                &nbsp;({profitMargin.toFixed(0)}%)
               </p>
             )}
           </div>

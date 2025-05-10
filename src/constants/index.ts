@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -14,6 +14,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   { label: 'شاشة المطبخ', href: '/kitchen', icon: ChefHat },
   { label: 'الطاولات', href: '/tables', icon: TableIcon },
+  { label: 'المخزون', href: '/inventory', icon: Package },
   { label: 'الطلبات', href: '/orders', icon: ListOrdered },
   { label: 'التقارير', href: '/reports', icon: BarChart3 },
 ];
@@ -32,6 +33,7 @@ export interface MenuItem {
   description?: string;
   dataAiHint?: string;
   sizes?: { name: string; price: number }[];
+  // ingredients?: { ingredientId: string; quantity: number }[]; // Future use
 }
 
 export const DUMMY_MENU_ITEMS: MenuItem[] = [
@@ -104,3 +106,98 @@ export const DUMMY_TABLES: Table[] = [
 ];
 
 export const TABLE_STATUSES: TableStatus[] = ["متاحة", "مشغولة", "محجوزة", "تحتاج تنظيف"];
+
+
+// Inventory Management
+export type IngredientUnit = 'جرام' | 'كيلوجرام' | 'مللي لتر' | 'لتر' | 'قطعة';
+export const INGREDIENT_UNITS: IngredientUnit[] = ['جرام', 'كيلوجرام', 'مللي لتر', 'لتر', 'قطعة'];
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  unit: IngredientUnit;
+  stockQuantity: number;
+  costPerUnit: number;
+  lowStockThreshold?: number;
+  supplierId?: string; // Optional: link to a default supplier
+}
+
+export let DUMMY_INGREDIENTS: Ingredient[] = [
+  { id: 'ing1', name: 'حبوب بن أرابيكا', unit: 'كيلوجرام', stockQuantity: 10, costPerUnit: 20, lowStockThreshold: 2 },
+  { id: 'ing2', name: 'حليب كامل الدسم', unit: 'لتر', stockQuantity: 20, costPerUnit: 1.5, lowStockThreshold: 5 },
+  { id: 'ing3', name: 'سكر أبيض', unit: 'كيلوجرام', stockQuantity: 50, costPerUnit: 0.8, lowStockThreshold: 10 },
+  { id: 'ing4', name: 'لحم برجر', unit: 'قطعة', stockQuantity: 100, costPerUnit: 1, lowStockThreshold: 20 },
+  { id: 'ing5', name: 'خبز برجر', unit: 'قطعة', stockQuantity: 100, costPerUnit: 0.25, lowStockThreshold: 20 },
+  { id: 'ing6', name: 'بطاطس مجمدة', unit: 'كيلوجرام', stockQuantity: 30, costPerUnit: 2, lowStockThreshold: 5 },
+  { id: 'ing7', name: 'دقيق كيك', unit: 'كيلوجرام', stockQuantity: 5, costPerUnit: 1.2, lowStockThreshold: 1 },
+  { id: 'ing8', name: 'بودرة كاكاو', unit: 'جرام', stockQuantity: 500, costPerUnit: 0.02, lowStockThreshold: 100 },
+  { id: 'ing9', name: 'معسل تفاح', unit: 'جرام', stockQuantity: 1000, costPerUnit: 0.05, lowStockThreshold: 200 },
+];
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}
+
+export let DUMMY_SUPPLIERS: Supplier[] = [
+  { id: 'sup1', name: 'موردو القهوة الممتازون', contactPerson: 'علي حسن', phone: '0501234567', email: 'ali.hassan@coffeebeans.com', address: 'شارع الرياض, جدة' },
+  { id: 'sup2', name: 'ألبان المزرعة الطازجة', contactPerson: 'فاطمة سعيد', phone: '0559876543', email: 'fatima.saeed@freshdairy.com', address: 'طريق الملك فهد, الرياض' },
+  { id: 'sup3', name: 'مخابز وحلويات المدينة', phone: '0123456789', address: 'حي النور, الدمام' },
+];
+
+export type PurchaseOrderStatus = 'معلق' | 'مؤكد' | 'مستلم' | 'ملغى';
+
+export interface PurchaseOrderItem {
+  ingredientId: string;
+  ingredientName: string; // For display
+  quantity: number;
+  costPerUnit: number; // Can be different from ingredient's default cost
+  unit: IngredientUnit;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  orderNumber: string;
+  supplierId: string;
+  supplierName: string; // For display
+  items: PurchaseOrderItem[];
+  totalAmount: number;
+  status: PurchaseOrderStatus;
+  orderDate: Date;
+  expectedDeliveryDate?: Date;
+  receivedDate?: Date;
+  notes?: string;
+}
+
+export let DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [
+    {
+        id: 'po1',
+        orderNumber: 'PO-2024-001',
+        supplierId: 'sup1',
+        supplierName: 'موردو القهوة الممتازون',
+        items: [
+            { ingredientId: 'ing1', ingredientName: 'حبوب بن أرابيكا', quantity: 5, costPerUnit: 19.5, unit: 'كيلوجرام' },
+        ],
+        totalAmount: 97.5,
+        status: 'مستلم',
+        orderDate: new Date('2024-04-01'),
+        receivedDate: new Date('2024-04-05'),
+    },
+    {
+        id: 'po2',
+        orderNumber: 'PO-2024-002',
+        supplierId: 'sup2',
+        supplierName: 'ألبان المزرعة الطازجة',
+        items: [
+            { ingredientId: 'ing2', ingredientName: 'حليب كامل الدسم', quantity: 10, costPerUnit: 1.5, unit: 'لتر' },
+        ],
+        totalAmount: 15,
+        status: 'مؤكد',
+        orderDate: new Date('2024-05-10'),
+        expectedDeliveryDate: new Date('2024-05-15'),
+    }
+];
