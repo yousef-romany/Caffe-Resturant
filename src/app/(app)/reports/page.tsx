@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, Order, OrderStatus, Category } from '@/constants';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, ShoppingBag, Utensils } from 'lucide-react';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'; // Renamed BarChart to avoid conflict
+import { DollarSign, ShoppingBag, Utensils, BarChart3 } from 'lucide-react';
 import { arSA } from 'date-fns/locale'; // Arabic locale
 
 // Helper to generate random colors for Pie chart
@@ -88,7 +88,7 @@ export default function ReportsPage() {
   if (!isClient) {
     return (
       <>
-        <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." />
+        <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." icon={BarChart3}/>
         <p>جارٍ تحميل التقارير...</p>
       </>
     );
@@ -96,7 +96,7 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." />
+      <PageHeader title="تقارير المبيعات" description="حلل أداء مبيعاتك." icon={BarChart3} />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <Card className="shadow-lg">
@@ -139,7 +139,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlySales} layout="horizontal" margin={{ right: 20 }}>
+              <RechartsBarChart data={monthlySales} layout="horizontal" margin={{ right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${value}`} orientation="right" />
@@ -150,7 +150,7 @@ export default function ReportsPage() {
                 />
                 <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
                 <Bar dataKey="sales" name="المبيعات" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              </RechartsBarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -210,3 +210,4 @@ export default function ReportsPage() {
     </>
   );
 }
+

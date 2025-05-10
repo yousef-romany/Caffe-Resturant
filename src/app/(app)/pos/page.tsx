@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType } from '@/constants';
-import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt } from 'lucide-react';
+import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES } from '@/constants';
+import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,9 +51,41 @@ export default function POSPage() {
   
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
 
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const tableNumFromQuery = searchParams.get('table');
+    const orderIdFromQuery = searchParams.get('orderId');
+
+    if (tableNumFromQuery) {
+      setOrderType('صالة');
+      setTableNumber(tableNumFromQuery);
+      if (orderIdFromQuery) {
+        setCurrentOrderId(orderIdFromQuery);
+        const existingOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery && o.tableNumber === tableNumFromQuery);
+        if (existingOrder) {
+          setCurrentOrder(existingOrder.items);
+          setGeneralOrderNotes(existingOrder.notes || '');
+        } else {
+           // Potentially a new order for this table if orderId was just generated
+           const newDummyOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery);
+           if(newDummyOrder){
+             setCurrentOrder(newDummyOrder.items); // Should be empty if new
+             setGeneralOrderNotes(newDummyOrder.notes || '');
+           }
+        }
+      } else {
+        // New order for this table, POS will generate an ID on place order
+        setCurrentOrderId(null); 
+      }
+    }
+  }, [searchParams]);
+
 
   const filteredItems = useMemo(() => {
     return DUMMY_MENU_ITEMS.filter(item =>
@@ -68,17 +101,14 @@ export default function POSPage() {
         orderItem.id === item.id && !orderItem.notes ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem
       ));
     } else {
-      setCurrentOrder([...currentOrder, { ...item, quantity: 1 }]);
+      setCurrentOrder([...currentOrder, { ...item, quantity: 1, notes: '' }]);
     }
     toast({ title: `تمت إضافة ${item.name} إلى الطلب.`});
   };
 
-  const handleUpdateQuantity = (itemId: string, change: number) => {
-     // Find the specific instance of the item, if multiple exist due to notes
-    const itemIndex = currentOrder.findIndex(item => item.id === itemId); // This might need refinement if IDs are not unique enough with notes
-
-    setCurrentOrder(currentOrder.map((item, index) => {
-      if (item.id === itemId) { // Simpler: assumes item id is unique enough, or update first match. For specific notes, use a more complex ID.
+  const handleUpdateQuantity = (itemId: string, itemNotes: string | undefined, change: number) => {
+    setCurrentOrder(currentOrder.map(item => {
+      if (item.id === itemId && item.notes === itemNotes) {
         const newQuantity = item.quantity + change;
         return newQuantity > 0 ? { ...item, quantity: newQuantity } : null;
       }
@@ -88,9 +118,6 @@ export default function POSPage() {
 
 
   const handleRemoveItem = (itemToRemove: OrderItem) => {
-    // To correctly remove an item that might have notes, we need a more specific identifier or remove the first match.
-    // For simplicity, this removes the first item matching the ID. If items with notes are treated as unique entries,
-    // this logic would need to compare the full item object or a unique instance ID.
     const itemIndexToRemove = currentOrder.findIndex(
       (item) => item.id === itemToRemove.id && item.notes === itemToRemove.notes
     );
@@ -106,13 +133,16 @@ export default function POSPage() {
 
   const handleSaveItemNotes = () => {
     if (editingItemNotes) {
-      // If item already exists with same notes, update its quantity.
-      // If notes changed, or item with new notes doesn't exist, create/update appropriately.
-      // This logic can get complex if you want to merge items vs. treat noted items as separate.
-      // For now, assume we update the notes of the specific item instance passed to editingItemNotes.
-      setCurrentOrder(currentOrder.map(item =>
-        item === editingItemNotes ? { ...item, notes: itemNotesInput } : item
-      ));
+      setCurrentOrder(currentOrder.map(item => {
+         // Find the specific item instance. Since items can be duplicated if added multiple times before notes,
+         // we need a more robust way if we want to edit a specific one.
+         // For simplicity, this example updates the first matching item by ID and old notes.
+         // A truly robust solution might involve unique instance IDs for each line item.
+        if (item.id === editingItemNotes.id && item.notes === editingItemNotes.notes && item.quantity === editingItemNotes.quantity) { // Check more props for uniqueness
+          return { ...item, notes: itemNotesInput };
+        }
+        return item;
+      }));
       setEditingItemNotes(null);
       setItemNotesInput('');
       toast({ title: `تم تحديث الملاحظات لـ ${editingItemNotes.name}.`});
@@ -123,18 +153,24 @@ export default function POSPage() {
     return currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [currentOrder]);
 
-  const resetPOSSession = () => {
+  const resetPOSSession = (navigateToTables: boolean = false) => {
     setCurrentOrder([]);
     setOrderType('');
     setTableNumber('');
     setCustomerName('');
     setDeliveryAddress('');
     setGeneralOrderNotes('');
-    // searchTerm and selectedCategory can remain
+    setCurrentOrderId(null);
+    if (navigateToTables) {
+      router.push('/tables');
+    } else {
+      router.replace('/pos', undefined); // Clear query params
+    }
   };
 
   const handleClearOrder = () => {
-    resetPOSSession();
+    const wasTableOrder = orderType === 'صالة' && tableNumber;
+    resetPOSSession(wasTableOrder);
     toast({ title: "تم مسح الطلب."});
   };
 
@@ -168,34 +204,67 @@ export default function POSPage() {
       toast({ title: "بيانات الطلب غير مكتملة", description: missingFieldMessage, variant: "destructive" });
       return;
     }
+    
+    let orderToConfirm: Order;
 
-    const newOrder: Order = {
-      id: `order-${Date.now()}`,
-      orderNumber: `طلب-${Date.now().toString().slice(-5)}`,
-      items: JSON.parse(JSON.stringify(currentOrder)), // Deep copy
-      totalAmount: orderTotal,
-      status: 'قيد الانتظار',
-      type: orderType as OrderType,
-      createdAt: new Date(),
-      notes: generalOrderNotes.trim() || undefined,
-    };
+    if (currentOrderId) { // Existing order for a table
+        const existingOrderIndex = DUMMY_ORDERS.findIndex(o => o.id === currentOrderId);
+        if (existingOrderIndex !== -1) {
+            DUMMY_ORDERS[existingOrderIndex] = {
+                ...DUMMY_ORDERS[existingOrderIndex],
+                items: JSON.parse(JSON.stringify(currentOrder)),
+                totalAmount: orderTotal,
+                status: 'قيد التجهيز', // Or keep 'قيد الانتظار' if no items changed, logic can be added
+                notes: generalOrderNotes.trim() || undefined,
+                // Ensure other fields like customerName for delivery/takeaway are preserved or updated if form allows
+            };
+            orderToConfirm = DUMMY_ORDERS[existingOrderIndex];
+        } else {
+             toast({ title: "خطأ في الطلب", description: `لم يتم العثور على الطلب ${currentOrderId}.`, variant: "destructive" });
+             return;
+        }
+    } else { // New order
+        const newOrderId = `order-${Date.now()}`;
+        const newOrder: Order = {
+          id: newOrderId,
+          orderNumber: `طلب-${Date.now().toString().slice(-5)}`,
+          items: JSON.parse(JSON.stringify(currentOrder)), // Deep copy
+          totalAmount: orderTotal,
+          status: 'قيد الانتظار',
+          type: orderType as OrderType,
+          createdAt: new Date(),
+          notes: generalOrderNotes.trim() || undefined,
+        };
+    
+        if (orderType === 'صالة') newOrder.tableNumber = tableNumber.trim();
+        if (orderType === 'سفري' || orderType === 'توصيل') newOrder.customerName = customerName.trim();
+        if (orderType === 'توصيل') newOrder.deliveryAddress = deliveryAddress.trim();
+        
+        DUMMY_ORDERS.unshift(newOrder); // Add to global orders list
+        orderToConfirm = newOrder;
 
-    if (orderType === 'صالة') newOrder.tableNumber = tableNumber.trim();
-    if (orderType === 'سفري' || orderType === 'توصيل') newOrder.customerName = customerName.trim();
-    if (orderType === 'توصيل') newOrder.deliveryAddress = deliveryAddress.trim();
+        // If it's a new table order, update the table status in DUMMY_TABLES
+        if (orderType === 'صالة' && tableNumber.trim()) {
+            const tableIndex = DUMMY_TABLES.findIndex(t => t.number === tableNumber.trim());
+            if (tableIndex !== -1) {
+                DUMMY_TABLES[tableIndex].status = 'مشغولة';
+                DUMMY_TABLES[tableIndex].orderId = newOrderId;
+            }
+        }
+    }
 
-    DUMMY_ORDERS.unshift(newOrder);
 
-    setConfirmedOrder(newOrder);
+    setConfirmedOrder(orderToConfirm);
     setIsInvoiceDialogOpen(true);
 
-    toast({ title: "تم إرسال الطلب للمطبخ", description: `طلب رقم ${newOrder.orderNumber}. جاري تجهيز الفاتورة.` });
+    toast({ title: "تم إرسال الطلب للمطبخ", description: `طلب رقم ${orderToConfirm.orderNumber}. جاري تجهيز الفاتورة.` });
   };
   
   const handleCloseInvoiceDialogAndClearPOS = () => {
     setIsInvoiceDialogOpen(false);
+    const wasTableOrder = confirmedOrder?.type === 'صالة' && confirmedOrder?.tableNumber;
     setConfirmedOrder(null);
-    resetPOSSession();
+    resetPOSSession(!!wasTableOrder); // Navigate to tables if it was a table order
   };
 
   const [isClient, setIsClient] = useState(false);
@@ -206,7 +275,11 @@ export default function POSPage() {
 
   return (
     <>
-      <PageHeader title="نقطة البيع" description="أنشئ طلبات جديدة بسرعة." />
+      <PageHeader 
+        title={tableNumber ? `نقطة البيع - طاولة ${tableNumber}` : "نقطة البيع"}
+        description={tableNumber ? `إدارة طلب الطاولة ${tableNumber}.` : "أنشئ طلبات جديدة بسرعة."}
+        icon={tableNumber ? TableIcon : ShoppingCart}
+      />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
         {/* Menu Items Section */}
         <div className="lg:col-span-2 flex flex-col h-full bg-card p-4 rounded-lg shadow-md">
@@ -261,7 +334,7 @@ export default function POSPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShoppingCart className="h-6 w-6 text-primary" />
-              الطلب الحالي
+              {currentOrderId ? `تعديل الطلب: ${DUMMY_ORDERS.find(o=>o.id === currentOrderId)?.orderNumber}` : 'الطلب الحالي'}
             </CardTitle>
           </CardHeader>
           <ScrollArea className="flex-grow">
@@ -270,8 +343,8 @@ export default function POSPage() {
                 <p className="text-center text-muted-foreground py-10">لا توجد عناصر في الطلب بعد.</p>
               ) : isClient ? (
                 <ul className="space-y-3 p-3">
-                  {currentOrder.map((item, idx) => ( // Added idx for a unique key if needed for items with notes
-                    <li key={`${item.id}-${idx}`} className="flex items-start gap-3 p-3 bg-secondary/50 rounded-md">
+                  {currentOrder.map((item, idx) => ( 
+                    <li key={`${item.id}-${item.notes || 'no-notes'}-${idx}`} className="flex items-start gap-3 p-3 bg-secondary/50 rounded-md">
                       <NextImage src={item.imageUrl} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
                       <div className="flex-grow">
                         <p className="font-medium text-sm">{item.name}</p>
@@ -279,11 +352,11 @@ export default function POSPage() {
                         {item.notes && <p className="text-xs text-blue-600 italic mt-0.5">ملاحظات: {item.notes}</p>}
                       </div>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleUpdateQuantity(item.id, -1)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleUpdateQuantity(item.id, item.notes, -1)}>
                           <MinusCircle className="h-4 w-4" />
                         </Button>
                         <span className="font-medium w-5 text-center">{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleUpdateQuantity(item.id, 1)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleUpdateQuantity(item.id, item.notes, 1)}>
                           <PlusCircle className="h-4 w-4" />
                         </Button>
                       </div>
@@ -293,7 +366,7 @@ export default function POSPage() {
                             <Edit2 className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
-                       {editingItemNotes === item && ( // Check if this specific item instance is being edited
+                       {editingItemNotes === item && ( 
                           <DialogContent>
                             <DialogHeader className="text-right">
                               <DialogTitle>تعديل الملاحظات لـ {editingItemNotes.name}</DialogTitle>
@@ -329,24 +402,26 @@ export default function POSPage() {
           {isClient && (
             <>
             <div className="space-y-3 p-4 border-t">
-              <div>
-                <Label htmlFor="orderType">نوع الطلب</Label>
-                <Select value={orderType} onValueChange={(value) => setOrderType(value as OrderType | '')}>
-                  <SelectTrigger id="orderType" className="mt-1">
-                    <SelectValue placeholder="اختر نوع الطلب" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="صالة">صالة</SelectItem>
-                    <SelectItem value="سفري">سفري</SelectItem>
-                    <SelectItem value="توصيل">توصيل</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!tableNumber && ( // Only show order type selection if not a table order from query
+                <div>
+                  <Label htmlFor="orderType">نوع الطلب</Label>
+                  <Select value={orderType} onValueChange={(value) => setOrderType(value as OrderType | '')} disabled={!!tableNumber}>
+                    <SelectTrigger id="orderType" className="mt-1">
+                      <SelectValue placeholder="اختر نوع الطلب" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="صالة">صالة</SelectItem>
+                      <SelectItem value="سفري">سفري</SelectItem>
+                      <SelectItem value="توصيل">توصيل</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {orderType === 'صالة' && (
                 <div>
                   <Label htmlFor="tableNumber">رقم الطاولة</Label>
-                  <Input id="tableNumber" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} placeholder="أدخل رقم الطاولة" className="mt-1" />
+                  <Input id="tableNumber" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} placeholder="أدخل رقم الطاولة" className="mt-1" disabled={!!searchParams.get('table')}/>
                 </div>
               )}
 
@@ -382,7 +457,7 @@ export default function POSPage() {
                   مسح الطلب
                 </Button>
                 <Button onClick={handlePlaceOrder} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={currentOrder.length === 0}>
-                  إرسال الطلب
+                  {currentOrderId ? 'تحديث الطلب' : 'إرسال الطلب'}
                 </Button>
               </div>
             </CardFooter>

@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -13,6 +13,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'نقطة البيع', href: '/pos', icon: ShoppingCart },
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   { label: 'شاشة المطبخ', href: '/kitchen', icon: ChefHat },
+  { label: 'الطاولات', href: '/tables', icon: TableIcon },
   { label: 'الطلبات', href: '/orders', icon: ListOrdered },
   { label: 'التقارير', href: '/reports', icon: BarChart3 },
 ];
@@ -77,3 +78,29 @@ export let DUMMY_ORDERS: Order[] = [
   { id: 'o5', orderNumber: 'طلب-005', items: [{ ...DUMMY_MENU_ITEMS[7], quantity: 1 }], totalAmount: 7.50, status: 'قيد التجهيز', type: 'صالة', tableNumber: '8', createdAt: new Date(Date.now() - 1800000) }, // 30 mins ago
   { id: 'o6', orderNumber: 'طلب-006', items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1 }], totalAmount: 7.50, status: 'جاهز', type: 'سفري', customerName: 'سارة إبراهيم', createdAt: new Date(Date.now() - 900000) }, // 15 mins ago
 ];
+
+
+export type TableStatus = "متاحة" | "مشغولة" | "محجوزة" | "تحتاج تنظيف";
+
+export interface Table {
+  id: string;
+  number: string;
+  status: TableStatus;
+  capacity: number;
+  orderId?: string; // To link to an active order if occupied
+}
+
+export const DUMMY_TABLES: Table[] = [
+  { id: 't1', number: '1', status: 'متاحة', capacity: 4 },
+  { id: 't2', number: '2', status: 'مشغولة', capacity: 2, orderId: 'o4' },
+  { id: 't3', number: '3', status: 'محجوزة', capacity: 6 },
+  { id: 't4', number: '4', status: 'متاحة', capacity: 4 },
+  { id: 't5', number: '5', status: 'تحتاج تنظيف', capacity: 2 },
+  { id: 't6', number: '6', status: 'متاحة', capacity: 8 },
+  { id: 't7', number: '7', status: 'متاحة', capacity: 4 },
+  { id: 't8', number: '8', status: 'مشغولة', capacity: 2, orderId: 'o5' },
+  { id: 't9', number: '9', status: 'متاحة', capacity: 6 },
+  { id: 't10', number: '10', status: 'محجوزة', capacity: 4 },
+];
+
+export const TABLE_STATUSES: TableStatus[] = ["متاحة", "مشغولة", "محجوزة", "تحتاج تنظيف"];
