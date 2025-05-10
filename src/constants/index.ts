@@ -64,15 +64,16 @@ export interface Order {
   tableNumber?: string;
   deliveryAddress?: string;
   captainName?: string;
+  notes?: string; // General notes for the entire order
   createdAt: Date; // Keep as Date object
 }
 
 // Make createdAt a proper Date object for sorting and display consistency
-export const DUMMY_ORDERS: Order[] = [
+export let DUMMY_ORDERS: Order[] = [
   { id: 'o1', orderNumber: 'طلب-001', items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 2 }, { ...DUMMY_MENU_ITEMS[2], quantity: 1, notes: "بدون بصل" }], totalAmount: 13.00, status: 'مكتمل', type: 'صالة', tableNumber: '5', createdAt: new Date(Date.now() - 3600000 * 3) },
-  { id: 'o2', orderNumber: 'طلب-002', items: [{ ...DUMMY_MENU_ITEMS[1], quantity: 1 }], totalAmount: 3.50, status: 'قيد التجهيز', type: 'سفري', createdAt: new Date(Date.now() - 3600000 * 2) },
-  { id: 'o3', orderNumber: 'طلب-003', items: [{ ...DUMMY_MENU_ITEMS[4], quantity: 1 }, { ...DUMMY_MENU_ITEMS[5], quantity: 1 }], totalAmount: 20.00, status: 'قيد الانتظار', type: 'توصيل', deliveryAddress: '123 الشارع الرئيسي', captainName: 'جون دو', createdAt: new Date(Date.now() - 3600000 * 1) },
+  { id: 'o2', orderNumber: 'طلب-002', items: [{ ...DUMMY_MENU_ITEMS[1], quantity: 1 }], totalAmount: 3.50, status: 'قيد التجهيز', type: 'سفري', customerName: 'أحمد محمود', createdAt: new Date(Date.now() - 3600000 * 2) },
+  { id: 'o3', orderNumber: 'طلب-003', items: [{ ...DUMMY_MENU_ITEMS[4], quantity: 1 }, { ...DUMMY_MENU_ITEMS[5], quantity: 1 }], totalAmount: 20.00, status: 'قيد الانتظار', type: 'توصيل', customerName: 'فاطمة علي', deliveryAddress: '123 الشارع الرئيسي, المدينة', captainName: 'جون دو', createdAt: new Date(Date.now() - 3600000 * 1) },
   { id: 'o4', orderNumber: 'طلب-004', items: [{ ...DUMMY_MENU_ITEMS[6], quantity: 2, notes: "سكر قليل" }, { ...DUMMY_MENU_ITEMS[3], quantity: 1 }], totalAmount: 16.00, status: 'قيد الانتظار', type: 'صالة', tableNumber: '2', createdAt: new Date() },
   { id: 'o5', orderNumber: 'طلب-005', items: [{ ...DUMMY_MENU_ITEMS[7], quantity: 1 }], totalAmount: 7.50, status: 'قيد التجهيز', type: 'صالة', tableNumber: '8', createdAt: new Date(Date.now() - 1800000) }, // 30 mins ago
-  { id: 'o6', orderNumber: 'طلب-006', items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1 }], totalAmount: 7.50, status: 'جاهز', type: 'سفري', createdAt: new Date(Date.now() - 900000) }, // 15 mins ago
+  { id: 'o6', orderNumber: 'طلب-006', items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1 }], totalAmount: 7.50, status: 'جاهز', type: 'سفري', customerName: 'سارة إبراهيم', createdAt: new Date(Date.now() - 900000) }, // 15 mins ago
 ];
