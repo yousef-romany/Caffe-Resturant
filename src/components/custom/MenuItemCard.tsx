@@ -1,3 +1,4 @@
+
 import NextImage from 'next/image'; // Using NextImage as Image might conflict
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,20 @@ export function MenuItemCard({ item, onEdit, onDelete, onAddToCart, variant = 'd
           <DollarSign className="h-4 w-4 me-1" /> {/* Changed mr-1 to me-1 for RTL */}
           <span>{item.price.toFixed(2)}</span>
         </div>
+        {variant === 'management' && typeof item.cost === 'number' && (
+          <div className="mt-1 space-y-0.5">
+            <p className="text-xs text-muted-foreground">
+              التكلفة: ${item.cost.toFixed(2)}
+            </p>
+            {item.price > 0 && (item.cost >= 0) && ( // Ensure cost is non-negative for meaningful profit calculation
+              <p className={`text-xs text-muted-foreground`}>
+                {item.price >= item.cost ? 'الربح: ' : 'الخسارة: '} 
+                ${(item.price - item.cost).toFixed(2)} 
+                &nbsp;({(((item.price - item.cost) / item.price) * 100).toFixed(0)}%)
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
       <CardFooter className="p-4 border-t">
         {variant === 'display' && onAddToCart && (

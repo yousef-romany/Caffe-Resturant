@@ -30,10 +30,11 @@ import { PlusCircle, Edit, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import NextImage from 'next/image'; // Renamed to avoid conflict
 
-const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { imageUrl?: string } = {
+const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { imageUrl?: string; cost?: number } = {
   name: '',
   category: ITEM_CATEGORIES[0],
   price: 0,
+  cost: 0,
   description: '',
   dataAiHint: '',
 };
@@ -57,7 +58,7 @@ export default function MenuPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setNewItemData(prev => ({ ...prev, [name]: name === 'price' ? parseFloat(value) || 0 : value }));
+    setNewItemData(prev => ({ ...prev, [name]: (name === 'price' || name === 'cost') ? parseFloat(value) || 0 : value }));
   };
 
   const handleCategoryChange = (value: string) => {
@@ -72,9 +73,10 @@ export default function MenuPage() {
 
     const newImageUrl = newItemData.imageUrl || `https://picsum.photos/200/200?random=${Math.floor(Math.random() * 1000)}`;
     const newAiHint = newItemData.dataAiHint || newItemData.category.toLowerCase();
+    const costValue = newItemData.cost || 0;
 
     if (editingItem) {
-      const updatedItem = { ...editingItem, ...newItemData, imageUrl: newImageUrl, dataAiHint: newAiHint };
+      const updatedItem = { ...editingItem, ...newItemData, imageUrl: newImageUrl, dataAiHint: newAiHint, cost: costValue };
       setMenuItems(menuItems.map(item => item.id === editingItem.id ? updatedItem : item));
       toast({ title: "نجاح", description: `تم تحديث ${updatedItem.name}.` });
     } else {
@@ -83,6 +85,7 @@ export default function MenuPage() {
         id: `menu-${Date.now()}`,
         imageUrl: newImageUrl,
         dataAiHint: newAiHint,
+        cost: costValue,
       };
       setMenuItems([newItemWithId, ...menuItems]);
       toast({ title: "نجاح", description: `تمت إضافة ${newItemWithId.name} إلى القائمة.` });
@@ -94,7 +97,7 @@ export default function MenuPage() {
 
   const handleEditItem = (item: MenuItem) => {
     setEditingItem(item);
-    setNewItemData({ ...item }); // Use spread to include all properties, including optional ones like dataAiHint
+    setNewItemData({ ...item, cost: item.cost || 0 }); 
     setIsDialogOpen(true);
   };
 
@@ -183,6 +186,10 @@ export default function MenuPage() {
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="price" className="text-left">السعر ($)</Label>
               <Input id="price" name="price" type="number" value={newItemData.price} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cost" className="text-left">التكلفة ($)</Label>
+              <Input id="cost" name="cost" type="number" value={newItemData.cost || 0} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="description" className="text-left">الوصف</Label>

@@ -27,22 +27,22 @@ export interface MenuItem {
   name: string;
   category: Category;
   price: number;
+  cost?: number; // Optional raw material cost
   imageUrl: string;
   description?: string;
   dataAiHint?: string;
   sizes?: { name: string; price: number }[];
-  cost?: number; // Optional raw material cost
 }
 
 export const DUMMY_MENU_ITEMS: MenuItem[] = [
-  { id: '1', name: 'اسبريسو', category: 'مشروبات', price: 2.50, imageUrl: 'https://picsum.photos/200/200?image=1060', dataAiHint: "coffee cup", description: "قهوة غنية وقوية" },
-  { id: '2', name: 'كابتشينو', category: 'مشروبات', price: 3.50, imageUrl: 'https://picsum.photos/200/200?image=225', dataAiHint: "latte art", description: "اسبريسو مع رغوة حليب مبخر" },
-  { id: '3', name: 'تشيز برجر', category: 'مأكولات', price: 8.00, imageUrl: 'https://picsum.photos/200/200?image=302', dataAiHint: "burger fries", description: "برجر لحم بالجبنة كلاسيكي" },
-  { id: '4', name: 'بطاطس مقلية', category: 'مأكولات', price: 3.00, imageUrl: 'https://picsum.photos/200/200?image=431', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة" },
-  { id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00, imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate cake", description: "كيكة شوكولاتة غنية وفاخرة" },
-  { id: '6', name: 'شيشة تفاح', category: 'شيشة', price: 15.00, imageUrl: 'https://picsum.photos/200/200?image=603', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة" },
-  { id: '7', name: 'آيس لاتيه', category: 'مشروبات', price: 4.00, imageUrl: 'https://picsum.photos/200/200?image=455', dataAiHint: "iced coffee", description: "لاتيه مثلج مع ثلج" },
-  { id: '8', name: 'ساندويتش دجاج', category: 'مأكولات', price: 7.50, imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي" },
+  { id: '1', name: 'اسبريسو', category: 'مشروبات', price: 2.50, cost: 0.50, imageUrl: 'https://picsum.photos/200/200?image=1060', dataAiHint: "coffee cup", description: "قهوة غنية وقوية" },
+  { id: '2', name: 'كابتشينو', category: 'مشروبات', price: 3.50, cost: 0.75, imageUrl: 'https://picsum.photos/200/200?image=225', dataAiHint: "latte art", description: "اسبريسو مع رغوة حليب مبخر" },
+  { id: '3', name: 'تشيز برجر', category: 'مأكولات', price: 8.00, cost: 2.50, imageUrl: 'https://picsum.photos/200/200?image=302', dataAiHint: "burger fries", description: "برجر لحم بالجبنة كلاسيكي" },
+  { id: '4', name: 'بطاطس مقلية', category: 'مأكولات', price: 3.00, cost: 0.80, imageUrl: 'https://picsum.photos/200/200?image=431', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة" },
+  { id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00, cost: 1.50, imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate cake", description: "كيكة شوكولاتة غنية وفاخرة" },
+  { id: '6', name: 'شيشة تفاح', category: 'شيشة', price: 15.00, cost: 3.00, imageUrl: 'https://picsum.photos/200/200?image=603', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة" },
+  { id: '7', name: 'آيس لاتيه', category: 'مشروبات', price: 4.00, cost: 1.00, imageUrl: 'https://picsum.photos/200/200?image=455', dataAiHint: "iced coffee", description: "لاتيه مثلج مع ثلج" },
+  { id: '8', name: 'ساندويتش دجاج', category: 'مأكولات', price: 7.50, cost: 2.00, imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي" },
 ];
 
 export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
