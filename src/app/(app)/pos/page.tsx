@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES, type Table, OrderStatus } from '@/constants';
-import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer } from 'lucide-react';
+import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES, type Table, OrderStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
+import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer, Percent } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
@@ -51,7 +52,10 @@ const invoiceLabels = {
     quantity: "الكمية",
     pricePerItem: "السعر لكل عنصر",
     itemNotes: "ملاحظات",
-    total: "الإجمالي",
+    subtotal: "الإجمالي الفرعي",
+    discount: "الخصم",
+    vat: `ضريبة القيمة المضافة (${DEFAULT_VAT_PERCENTAGE}%)`,
+    total: "الإجمالي النهائي",
     close: "إغلاق",
     pay: "محاسبة ودفع",
     print: "طباعة الفاتورة",
@@ -71,6 +75,9 @@ const invoiceLabels = {
     posDescTable: (tableNum: string) => `إدارة طلب الطاولة ${tableNum}.`,
     posTitleGeneral: "نقطة البيع",
     posDescGeneral: "أنشئ طلبات جديدة بسرعة.",
+    applyDiscount: "تطبيق الخصم",
+    applyVAT: `تطبيق ضريبة القيمة المضافة (${DEFAULT_VAT_PERCENTAGE}%)`,
+    discountPercentage: "نسبة الخصم (%)",
   },
   en: {
     invoiceTitle: "Order Invoice",
@@ -86,7 +93,10 @@ const invoiceLabels = {
     quantity: "Quantity",
     pricePerItem: "Price per item",
     itemNotes: "Notes",
-    total: "Total",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    vat: `VAT (${DEFAULT_VAT_PERCENTAGE}%)`,
+    total: "Total Amount",
     close: "Close",
     pay: "Settle & Pay",
     print: "Print Invoice",
@@ -106,6 +116,9 @@ const invoiceLabels = {
     posDescTable: (tableNum: string) => `Manage order for table ${tableNum}.`,
     posTitleGeneral: "Point of Sale",
     posDescGeneral: "Quickly create new orders.",
+    applyDiscount: "Apply Discount",
+    applyVAT: `Apply VAT (${DEFAULT_VAT_PERCENTAGE}%)`,
+    discountPercentage: "Discount Percentage (%)",
   },
 };
 
@@ -127,6 +140,11 @@ export default function POSPage() {
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const [invoiceLanguage, setInvoiceLanguage] = useState<'ar' | 'en'>('ar');
+
+  const [isDiscountEnabled, setIsDiscountEnabled] = useState(false);
+  const [discountPercentage, setDiscountPercentage] = useState(0);
+  const [isVatEnabled, setIsVatEnabled] = useState(false);
+  const vatPercentage = DEFAULT_VAT_PERCENTAGE; // Fixed VAT for now
 
 
   const { toast } = useToast();
@@ -159,7 +177,9 @@ export default function POSPage() {
           setGeneralOrderNotes(existingOrder.notes || '');
           if(existingOrder.customerName) setCustomerName(existingOrder.customerName);
           if(existingOrder.type === 'توصيل' && existingOrder.deliveryAddress) setDeliveryAddress(existingOrder.deliveryAddress);
-
+          setIsDiscountEnabled(!!existingOrder.discountPercentage && existingOrder.discountPercentage > 0);
+          setDiscountPercentage(existingOrder.discountPercentage || 0);
+          setIsVatEnabled(!!existingOrder.vatPercentage && existingOrder.vatPercentage > 0);
         } else {
            const newDummyOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery);
            if(newDummyOrder){
@@ -169,6 +189,9 @@ export default function POSPage() {
         }
       } else {
         setCurrentOrderId(null); 
+        setIsDiscountEnabled(false);
+        setDiscountPercentage(0);
+        setIsVatEnabled(false);
       }
     } else {
       setOrderType(''); 
@@ -178,6 +201,9 @@ export default function POSPage() {
       setGeneralOrderNotes('');
       setCustomerName('');
       setDeliveryAddress('');
+      setIsDiscountEnabled(false);
+      setDiscountPercentage(0);
+      setIsVatEnabled(false);
     }
   }, [searchParams]);
 
@@ -240,9 +266,26 @@ export default function POSPage() {
     }
   };
 
-  const orderTotal = useMemo(() => {
-    return currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [currentOrder]);
+  const orderCalculations = useMemo(() => {
+    const subtotal = currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    
+    let discountAmount = 0;
+    if (isDiscountEnabled && discountPercentage > 0) {
+      discountAmount = subtotal * (discountPercentage / 100);
+    }
+    
+    const totalAfterDiscount = subtotal - discountAmount;
+    
+    let vatAmount = 0;
+    if (isVatEnabled) {
+      vatAmount = totalAfterDiscount * (vatPercentage / 100);
+    }
+    
+    const finalTotal = totalAfterDiscount + vatAmount;
+    
+    return { subtotal, discountAmount, totalAfterDiscount, vatAmount, finalTotal };
+  }, [currentOrder, isDiscountEnabled, discountPercentage, isVatEnabled, vatPercentage]);
+
 
   const resetPOSSession = (navigateToTables: boolean = false) => {
     setCurrentOrder([]);
@@ -254,7 +297,10 @@ export default function POSPage() {
     setCurrentOrderId(null);
     setSearchTerm(''); 
     setSelectedCategory('الكل'); 
-    setInvoiceLanguage('ar'); // Reset invoice language
+    setIsDiscountEnabled(false);
+    setDiscountPercentage(0);
+    setIsVatEnabled(false);
+    setInvoiceLanguage('ar');
 
     if (navigateToTables) {
       router.push('/tables');
@@ -300,6 +346,7 @@ export default function POSPage() {
       return;
     }
     
+    const { subtotal, discountAmount, vatAmount, finalTotal } = orderCalculations;
     let orderToConfirm: Order;
 
     if (currentOrderId) { 
@@ -308,7 +355,12 @@ export default function POSPage() {
             DUMMY_ORDERS[existingOrderIndex] = {
                 ...DUMMY_ORDERS[existingOrderIndex],
                 items: JSON.parse(JSON.stringify(currentOrder)),
-                totalAmount: orderTotal,
+                subtotal: subtotal,
+                discountPercentage: isDiscountEnabled ? discountPercentage : undefined,
+                discountAmount: isDiscountEnabled ? discountAmount : undefined,
+                vatPercentage: isVatEnabled ? vatPercentage : undefined,
+                vatAmount: isVatEnabled ? vatAmount : undefined,
+                totalAmount: finalTotal,
                 status: DUMMY_ORDERS[existingOrderIndex].status === 'قيد الانتظار' ? 'قيد الانتظار' : 'قيد التجهيز', 
                 notes: generalOrderNotes.trim() || undefined,
                 customerName: customerName.trim() || undefined,
@@ -325,7 +377,12 @@ export default function POSPage() {
           id: newOrderId,
           orderNumber: `طلب-${Date.now().toString().slice(-5)}`,
           items: JSON.parse(JSON.stringify(currentOrder)), 
-          totalAmount: orderTotal,
+          subtotal: subtotal,
+          discountPercentage: isDiscountEnabled ? discountPercentage : undefined,
+          discountAmount: isDiscountEnabled ? discountAmount : undefined,
+          vatPercentage: isVatEnabled ? vatPercentage : undefined,
+          vatAmount: isVatEnabled ? vatAmount : undefined,
+          totalAmount: finalTotal,
           status: 'قيد الانتظار',
           type: orderType as OrderType, 
           createdAt: new Date(),
@@ -571,14 +628,63 @@ export default function POSPage() {
                   <Label htmlFor="generalOrderNotes">ملاحظات الطلب</Label>
                   <Textarea id="generalOrderNotes" value={generalOrderNotes} onChange={(e) => setGeneralOrderNotes(e.target.value)} placeholder={currentLabels.notesPlaceholder} className="mt-1"/>
               </div>
+
+              {/* Discount and VAT Section */}
+              <Separator className="my-3" />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="isDiscountEnabled" className="flex items-center gap-2 cursor-pointer">
+                    <Switch id="isDiscountEnabled" checked={isDiscountEnabled} onCheckedChange={setIsDiscountEnabled} />
+                    {currentLabels.applyDiscount}
+                  </Label>
+                  {isDiscountEnabled && (
+                    <div className="flex items-center gap-2 w-28">
+                      <Input 
+                        type="number" 
+                        id="discountPercentage" 
+                        value={discountPercentage} 
+                        onChange={(e) => setDiscountPercentage(parseFloat(e.target.value) || 0)} 
+                        className="h-8 text-sm"
+                        min="0" max="100"
+                      />
+                      <Percent className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="isVatEnabled" className="flex items-center gap-2 cursor-pointer">
+                    <Switch id="isVatEnabled" checked={isVatEnabled} onCheckedChange={setIsVatEnabled} />
+                    {currentLabels.applyVAT}
+                  </Label>
+                </div>
+              </div>
             </div>
 
-            <CardFooter className="flex flex-col gap-4 pt-4 border-t">
+            <CardFooter className="flex flex-col gap-3 pt-4 border-t">
+              <div className="w-full text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>{currentLabels.subtotal}:</span>
+                  <span>${orderCalculations.subtotal.toFixed(2)}</span>
+                </div>
+                {isDiscountEnabled && orderCalculations.discountAmount > 0 && (
+                  <div className="flex justify-between text-destructive">
+                    <span>{currentLabels.discount} ({discountPercentage}%):</span>
+                    <span>-${orderCalculations.discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                 {isVatEnabled && (
+                  <div className="flex justify-between">
+                    <span>{currentLabels.vat}:</span>
+                    <span>+${orderCalculations.vatAmount.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+              <Separator/>
               <div className="w-full flex justify-between items-center text-lg font-semibold">
-                <span>الإجمالي:</span>
+                <span>{currentLabels.total}:</span>
                 <span className="flex items-center">
                   <DollarSign className="h-5 w-5 me-1 text-primary" />
-                  {orderTotal.toFixed(2)}
+                  {orderCalculations.finalTotal.toFixed(2)}
                 </span>
               </div>
               <div className="w-full grid grid-cols-2 gap-2">
@@ -602,7 +708,7 @@ export default function POSPage() {
       {confirmedOrder && (
         <Dialog open={isInvoiceDialogOpen} onOpenChange={(open) => { if(!open) handleCloseInvoiceDialogAndClearPOS(); }}>
           <DialogContent className="sm:max-w-lg printable-area" dir={invoiceLanguage === 'en' ? 'ltr' : 'rtl'}>
-            <div className="printable-invoice-content"> {/* Inner div for actual printable content */}
+            <div className="printable-invoice-content">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Receipt className="h-6 w-6 text-primary"/>
@@ -641,8 +747,28 @@ export default function POSPage() {
                   ))}
                 </ul>
                 <Separator className="my-3"/>
-                <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-start' : 'justify-end'}`}>
-                  <p className="text-lg font-bold">{currentLabels.total}: ${confirmedOrder.totalAmount.toFixed(2)}</p>
+                <div className="space-y-1 text-sm">
+                  <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                    <p>{currentLabels.subtotal}:</p>
+                    <p>${(confirmedOrder.subtotal ?? 0).toFixed(2)}</p>
+                  </div>
+                  {confirmedOrder.discountAmount && confirmedOrder.discountAmount > 0 && (
+                    <div className={`flex items-center text-destructive ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                       <p>{currentLabels.discount} ({confirmedOrder.discountPercentage || 0}%):</p>
+                       <p>-${confirmedOrder.discountAmount.toFixed(2)}</p>
+                    </div>
+                  )}
+                  {confirmedOrder.vatAmount && confirmedOrder.vatAmount > 0 && (
+                     <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                       <p>{currentLabels.vat}:</p>
+                       <p>+${confirmedOrder.vatAmount.toFixed(2)}</p>
+                    </div>
+                  )}
+                </div>
+                <Separator className="my-3"/>
+                <div className={`flex items-center ${invoiceLanguage === 'ar' ? 'justify-between' : 'justify-between'}`}>
+                  <p className="text-lg font-bold">{currentLabels.total}:</p>
+                  <p className="text-lg font-bold">${confirmedOrder.totalAmount.toFixed(2)}</p>
                 </div>
               </div>
             </div>
@@ -674,9 +800,10 @@ export default function POSPage() {
                     const tableIdx = DUMMY_TABLES.findIndex(t => t.number === confirmedOrder.tableNumber);
                     if (tableIdx !== -1) {
                        DUMMY_TABLES[tableIdx].status = 'تحتاج تنظيف';
+                       DUMMY_TABLES[tableIdx].orderId = undefined; // Clear orderId from table
                     }
                   }
-                  toast({title: "تمت المحاسبة (تجريبي)"}); 
+                  toast({title: "تمت المحاسبة بنجاح"}); 
                   handleCloseInvoiceDialogAndClearPOS(); 
                 }}>
                 {currentLabels.pay}
