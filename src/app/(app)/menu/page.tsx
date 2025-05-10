@@ -15,8 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
-  DialogClose,
+  DialogClose, // Removed DialogTrigger as it's handled by openNewItemDialog
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -25,63 +24,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type Category, DUMMY_INGREDIENTS, type MenuItemIngredient, type IngredientUnit } from '@/constants';
-import { PlusCircle, Edit, Trash2, Search } from 'lucide-react';
+import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type Category, DUMMY_INGREDIENTS, type MenuItemIngredient, type IngredientUnit, INGREDIENT_UNITS, type Ingredient as StockIngredient } from '@/constants';
+import { PlusCircle, Edit, Trash2, Search, PackagePlus, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import NextImage from 'next/image'; 
+import { Separator } from '@/components/ui/separator';
 
 const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { manualCost?: number } = {
   name: '',
   category: ITEM_CATEGORIES[0],
   price: 0,
-  manualCost: 0, // For items without detailed ingredients or as an override
+  manualCost: 0, 
   description: '',
   dataAiHint: '',
   ingredients: [],
 };
 
 const calculateMenuItemCost = (
-  ingredients: MenuItemIngredient[] | undefined,
-  allIngredients: typeof DUMMY_INGREDIENTS
+  menuIngredients: MenuItemIngredient[] | undefined,
+  allStockIngredients: StockIngredient[]
 ): number => {
-  if (!ingredients || ingredients.length === 0) {
+  if (!menuIngredients || menuIngredients.length === 0) {
     return 0;
   }
 
   let totalCost = 0;
-  ingredients.forEach(recipeIngredient => {
-    const inventoryIngredient = allIngredients.find(i => i.id === recipeIngredient.ingredientId);
-    if (inventoryIngredient) {
+  menuIngredients.forEach(recipeIngredient => {
+    const stockIngredient = allStockIngredients.find(i => i.id === recipeIngredient.ingredientId);
+    if (stockIngredient && recipeIngredient.quantity > 0) {
       let costForIngredient = 0;
-      // Attempt basic unit conversion
-      // This is a simplified conversion logic. A real system would need a robust unit conversion library.
-      if (inventoryIngredient.unit === 'كيلوجرام' && recipeIngredient.unit === 'جرام') {
-        costForIngredient = (inventoryIngredient.costPerUnit / 1000) * recipeIngredient.quantity;
-      } else if (inventoryIngredient.unit === 'لتر' && recipeIngredient.unit === 'مللي لتر') {
-        costForIngredient = (inventoryIngredient.costPerUnit / 1000) * recipeIngredient.quantity;
-      } else if (inventoryIngredient.unit === 'جرام' && recipeIngredient.unit === 'كيلوجرام') { // Should not happen if recipe uses smaller unit
-        costForIngredient = (inventoryIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
-      } else if (inventoryIngredient.unit === 'مللي لتر' && recipeIngredient.unit === 'لتر') { // Should not happen
-        costForIngredient = (inventoryIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
-      } else if (inventoryIngredient.unit === recipeIngredient.unit) { // Units match
-        costForIngredient = inventoryIngredient.costPerUnit * recipeIngredient.quantity;
+      // Simplified unit conversion logic.
+      if (stockIngredient.unit === 'كيلوجرام' && recipeIngredient.unit === 'جرام') {
+        costForIngredient = (stockIngredient.costPerUnit / 1000) * recipeIngredient.quantity;
+      } else if (stockIngredient.unit === 'لتر' && recipeIngredient.unit === 'مللي لتر') {
+        costForIngredient = (stockIngredient.costPerUnit / 1000) * recipeIngredient.quantity;
+      } else if (stockIngredient.unit === 'جرام' && recipeIngredient.unit === 'كيلوجرام') {
+        costForIngredient = (stockIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
+      } else if (stockIngredient.unit === 'مللي لتر' && recipeIngredient.unit === 'لتر') {
+        costForIngredient = (stockIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
+      } else if (stockIngredient.unit === recipeIngredient.unit || stockIngredient.unit === 'قطعة' && recipeIngredient.unit === 'قطعة') {
+        costForIngredient = stockIngredient.costPerUnit * recipeIngredient.quantity;
       } else {
-        // Fallback if units don't match known conversions or are incompatible (e.g., 'gram' vs 'piece')
-        // This might lead to inaccurate costs if units are not properly aligned.
-        // For 'piece' unit, direct multiplication is usually correct.
-        if (inventoryIngredient.unit === 'قطعة' && recipeIngredient.unit === 'قطعة') {
-           costForIngredient = inventoryIngredient.costPerUnit * recipeIngredient.quantity;
-        } else {
-          console.warn(`Unit mismatch for ingredient ${inventoryIngredient.name}: recipe unit ${recipeIngredient.unit}, stock unit ${inventoryIngredient.unit}. Cost calculation may be inaccurate. Falling back to direct multiplication.`);
-          costForIngredient = inventoryIngredient.costPerUnit * recipeIngredient.quantity; // Potentially incorrect
-        }
+        console.warn(`Unit mismatch for ingredient ${stockIngredient.name}: recipe unit ${recipeIngredient.unit}, stock unit ${stockIngredient.unit}. Cost calculation may be inaccurate. Using direct multiplication.`);
+        costForIngredient = stockIngredient.costPerUnit * recipeIngredient.quantity; 
       }
       totalCost += costForIngredient;
-    } else {
+    } else if (!stockIngredient) {
       console.warn(`Ingredient with ID ${recipeIngredient.ingredientId} not found in inventory.`);
     }
   });
-  return parseFloat(totalCost.toFixed(4)); // Round to sensible decimal places for cost
+  return parseFloat(totalCost.toFixed(4));
 };
 
 
@@ -92,14 +84,15 @@ export default function MenuPage() {
   const [newItemData, setNewItemData] = useState(initialNewItemState);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
+  const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]);
 
   useEffect(() => {
-    // Pre-calculate costs for DUMMY_MENU_ITEMS that have ingredients defined
+    setStockIngredients(DUMMY_INGREDIENTS);
     const itemsWithCalculatedCosts = DUMMY_MENU_ITEMS.map(item => {
       if (item.ingredients && item.ingredients.length > 0) {
         return { ...item, cost: calculateMenuItemCost(item.ingredients, DUMMY_INGREDIENTS) };
       }
-      return item; // Use existing cost if no ingredients or if it's manually set
+      return item; 
     });
     setMenuItems(itemsWithCalculatedCosts);
   }, []);
@@ -121,18 +114,61 @@ export default function MenuPage() {
     setNewItemData(prev => ({ ...prev, category: value as Category }));
   };
 
+  const handleAddIngredientToRecipe = () => {
+    setNewItemData(prev => ({
+      ...prev,
+      ingredients: [...(prev.ingredients || []), { ingredientId: '', quantity: 1, unit: INGREDIENT_UNITS[0] }]
+    }));
+  };
+
+  const handleRecipeIngredientChange = (index: number, field: keyof MenuItemIngredient, value: string | number) => {
+    setNewItemData(prev => ({
+      ...prev,
+      ingredients: (prev.ingredients || []).map((ing, i) => 
+        i === index ? { ...ing, [field]: field === 'quantity' ? parseFloat(value as string) || 0 : value } : ing
+      )
+    }));
+  };
+  
+  const handleRecipeIngredientUnitChange = (index: number, value: IngredientUnit) => {
+     setNewItemData(prev => ({
+      ...prev,
+      ingredients: (prev.ingredients || []).map((ing, i) => 
+        i === index ? { ...ing, unit: value } : ing
+      )
+    }));
+  };
+
+
+  const handleRemoveIngredientFromRecipe = (index: number) => {
+    setNewItemData(prev => ({
+      ...prev,
+      ingredients: (prev.ingredients || []).filter((_, i) => i !== index)
+    }));
+  };
+
   const handleSubmit = () => {
     if (!newItemData.name || newItemData.price <= 0) {
       toast({ title: "خطأ", description: "الاسم وسعر صالح مطلوبان.", variant: "destructive" });
       return;
     }
 
-    const newImageUrl = newItemData.imageUrl || `https://picsum.photos/200/200?random=${Math.floor(Math.random() * 1000)}`;
+    // Validate ingredients if any
+    if (newItemData.ingredients && newItemData.ingredients.length > 0) {
+      for (const ing of newItemData.ingredients) {
+        if (!ing.ingredientId || ing.quantity <= 0) {
+          toast({ title: "خطأ في المكونات", description: "يرجى تحديد مكون صالح وكمية أكبر من الصفر لكل مكون.", variant: "destructive" });
+          return;
+        }
+      }
+    }
+
+    const newImageUrl = newItemData.imageUrl || `https://picsum.photos/300/200?random=${Math.floor(Math.random() * 1000)}`;
     const newAiHint = newItemData.dataAiHint || newItemData.category.toLowerCase();
     
     let finalCost: number;
     if (newItemData.ingredients && newItemData.ingredients.length > 0) {
-      finalCost = calculateMenuItemCost(newItemData.ingredients, DUMMY_INGREDIENTS);
+      finalCost = calculateMenuItemCost(newItemData.ingredients, stockIngredients);
     } else {
       finalCost = newItemData.manualCost || 0;
     }
@@ -144,8 +180,7 @@ export default function MenuPage() {
         cost: finalCost, 
         imageUrl: newImageUrl, 
         dataAiHint: newAiHint,
-        // ingredients will be part of newItemData if they were edited (though UI for that is not yet here)
-        ingredients: newItemData.ingredients || editingItem.ingredients 
+        ingredients: newItemData.ingredients && newItemData.ingredients.length > 0 ? newItemData.ingredients : undefined,
       };
       setMenuItems(menuItems.map(item => item.id === editingItem.id ? updatedItem : item));
       toast({ title: "نجاح", description: `تم تحديث ${updatedItem.name}.` });
@@ -159,7 +194,7 @@ export default function MenuPage() {
         imageUrl: newImageUrl,
         description: newItemData.description,
         dataAiHint: newAiHint,
-        ingredients: newItemData.ingredients,
+        ingredients: newItemData.ingredients && newItemData.ingredients.length > 0 ? newItemData.ingredients : undefined,
       };
       setMenuItems([newItemWithId, ...menuItems]);
       toast({ title: "نجاح", description: `تمت إضافة ${newItemWithId.name} إلى القائمة.` });
@@ -171,9 +206,6 @@ export default function MenuPage() {
 
   const handleEditItem = (item: MenuItem) => {
     setEditingItem(item);
-    const costToEdit = (item.ingredients && item.ingredients.length > 0) 
-                       ? calculateMenuItemCost(item.ingredients, DUMMY_INGREDIENTS) 
-                       : item.cost;
     setNewItemData({ 
       ...item, 
       manualCost: item.cost, // Store original or manual cost here
@@ -195,16 +227,16 @@ export default function MenuPage() {
 
   const displayedCost = useMemo(() => {
     if (newItemData.ingredients && newItemData.ingredients.length > 0) {
-      return calculateMenuItemCost(newItemData.ingredients, DUMMY_INGREDIENTS);
+      return calculateMenuItemCost(newItemData.ingredients, stockIngredients);
     }
     return newItemData.manualCost || 0;
-  }, [newItemData.ingredients, newItemData.manualCost]);
+  }, [newItemData.ingredients, newItemData.manualCost, stockIngredients]);
 
   return (
     <>
       <PageHeader
         title="إدارة القائمة"
-        description="إضافة أو تعديل أو حذف عناصر القائمة. التكاليف تُحسب تلقائيًا إذا تم تحديد المكونات."
+        description="إضافة أو تعديل أو حذف عناصر القائمة. يمكن حساب التكاليف تلقائيًا عند تحديد المكونات."
         actions={
           <Button onClick={openNewItemDialog} className="bg-primary hover:bg-primary/90 text-primary-foreground">
             <PlusCircle className="h-5 w-5 me-2" /> إضافة عنصر جديد
@@ -244,15 +276,14 @@ export default function MenuPage() {
       )}
       
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[525px]">
+        <DialogContent className="sm:max-w-2xl"> {/* Increased width for ingredient section */}
           <DialogHeader>
             <DialogTitle>{editingItem ? 'تعديل عنصر القائمة' : 'إضافة عنصر قائمة جديد'}</DialogTitle>
             <DialogDescription>
               {editingItem ? 'قم بتحديث تفاصيل عنصر القائمة هذا.' : 'املأ تفاصيل عنصر القائمة الجديد.'}
-              {' '}يمكن حساب التكلفة تلقائيًا إذا تم تحديد المكونات (إدارة المكونات للعنصر ستضاف لاحقًا).
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto ps-2">
+          <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto ps-2 pe-4"> {/* Added pe-4 for scrollbar spacing */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="name" className="text-left">الاسم</Label>
               <Input id="name" name="name" value={newItemData.name} onChange={handleInputChange} className="col-span-3" />
@@ -278,32 +309,32 @@ export default function MenuPage() {
               <Label htmlFor="cost" className="text-left">التكلفة ($)</Label>
               <Input 
                 id="cost" 
-                name="manualCost" // Changed name to manualCost to avoid conflict if ingredients are used
+                name="manualCost"
                 type="number" 
-                value={displayedCost} 
+                value={newItemData.ingredients && newItemData.ingredients.length > 0 ? displayedCost.toFixed(4) : newItemData.manualCost} 
                 onChange={handleInputChange} 
                 className="col-span-3" 
                 min="0" 
-                step="0.01"
+                step="0.0001"
                 disabled={!!(newItemData.ingredients && newItemData.ingredients.length > 0)}
                 title={(newItemData.ingredients && newItemData.ingredients.length > 0) ? "محسوبة من المكونات" : "أدخل التكلفة يدويًا إذا لم يتم تحديد مكونات"}
               />
             </div>
-             {newItemData.ingredients && newItemData.ingredients.length > 0 && (
-                 <p className="col-span-4 text-xs text-muted-foreground text-center">التكلفة محسوبة بناءً على المكونات المحددة.</p>
+             {(newItemData.ingredients && newItemData.ingredients.length > 0) && (
+                 <p className="col-span-4 text-xs text-muted-foreground text-center -mt-2">التكلفة ${displayedCost.toFixed(4)} محسوبة بناءً على المكونات المحددة.</p>
              )}
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="description" className="text-left">الوصف</Label>
+            <div className="grid grid-cols-4 items-start gap-4"> {/* Changed items-center to items-start for Textarea */}
+              <Label htmlFor="description" className="text-left pt-2">الوصف</Label>
               <Textarea id="description" name="description" value={newItemData.description} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="imageUrl" className="text-left">رابط الصورة</Label>
-              <Input id="imageUrl" name="imageUrl" value={newItemData.imageUrl || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري، مثال: https://picsum.photos/200/200"/>
+              <Input id="imageUrl" name="imageUrl" value={newItemData.imageUrl || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري، مثال: https://picsum.photos/300/200"/>
             </div>
             {newItemData.imageUrl && (
               <div className="grid grid-cols-4 items-center gap-4">
                 <div className="col-start-2 col-span-3">
-                  <NextImage src={newItemData.imageUrl} alt="معاينة" width={80} height={80} className="rounded-md object-cover" data-ai-hint={newItemData.dataAiHint || "item preview"}/>
+                  <NextImage src={newItemData.imageUrl} alt="معاينة" width={120} height={80} className="rounded-md object-cover" data-ai-hint={newItemData.dataAiHint || "item preview"}/>
                 </div>
               </div>
             )}
@@ -311,9 +342,74 @@ export default function MenuPage() {
               <Label htmlFor="dataAiHint" className="text-left">تلميح للذكاء الاصطناعي</Label>
               <Input id="dataAiHint" name="dataAiHint" value={newItemData.dataAiHint || ''} onChange={handleInputChange} className="col-span-3" placeholder="مثال: كوب قهوة، برجر بطاطس (كلمتان كحد أقصى)"/>
             </div>
-            {/* Placeholder for ingredient management UI - to be added in a future step */}
-            <div className="col-span-4 mt-4 p-2 border rounded-md">
-                <p className="text-sm font-medium text-center text-muted-foreground">إدارة مكونات هذا العنصر ستكون متاحة هنا قريبًا.</p>
+
+            <Separator className="my-4 col-span-4" />
+
+            {/* Ingredient Management Section */}
+            <div className="col-span-4 space-y-4">
+              <h3 className="text-lg font-medium text-center">مكونات هذا العنصر</h3>
+              {(newItemData.ingredients || []).map((ingredient, index) => (
+                <div key={index} className="grid grid-cols-12 items-center gap-2 p-3 border rounded-md">
+                  <div className="col-span-5">
+                    <Label htmlFor={`ingredientId-${index}`} className="sr-only">المكون</Label>
+                    <Select 
+                      value={ingredient.ingredientId} 
+                      onValueChange={(value) => handleRecipeIngredientChange(index, 'ingredientId', value)}
+                    >
+                      <SelectTrigger id={`ingredientId-${index}`}>
+                        <SelectValue placeholder="اختر المكون" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stockIngredients.map(si => (
+                          <SelectItem key={si.id} value={si.id}>{si.name} ({si.unit})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-3">
+                    <Label htmlFor={`quantity-${index}`} className="sr-only">الكمية</Label>
+                    <Input 
+                      id={`quantity-${index}`} 
+                      type="number" 
+                      value={ingredient.quantity} 
+                      onChange={(e) => handleRecipeIngredientChange(index, 'quantity', e.target.value)} 
+                      min="0.001" 
+                      step="0.001"
+                      placeholder="الكمية"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <Label htmlFor={`unit-${index}`} className="sr-only">الوحدة</Label>
+                    <Select 
+                      value={ingredient.unit} 
+                      onValueChange={(value) => handleRecipeIngredientUnitChange(index, value as IngredientUnit)}
+                    >
+                      <SelectTrigger id={`unit-${index}`}>
+                        <SelectValue placeholder="الوحدة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INGREDIENT_UNITS.map(unit => (
+                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <Button variant="ghost" size="icon" onClick={() => handleRemoveIngredientFromRecipe(index)} className="text-destructive">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {(!newItemData.ingredients || newItemData.ingredients.length === 0) && !editingItem && (
+                 <p className="text-sm text-muted-foreground text-center">لم يتم تحديد مكونات. ستُستخدم التكلفة اليدوية إذا لم تتم إضافة مكونات.</p>
+              )}
+               {editingItem && (!newItemData.ingredients || newItemData.ingredients.length === 0) && (
+                 <p className="text-sm text-muted-foreground text-center">لا توجد مكونات محددة لهذا العنصر. ستُستخدم التكلفة اليدوية إذا لم تتم إضافة مكونات.</p>
+              )}
+              <Button type="button" variant="outline" onClick={handleAddIngredientToRecipe} className="w-full">
+                <PackagePlus className="h-4 w-4 me-2" /> إضافة مكون للعنصر
+              </Button>
             </div>
           </div>
           <DialogFooter>
@@ -329,3 +425,4 @@ export default function MenuPage() {
     </>
   );
 }
+
