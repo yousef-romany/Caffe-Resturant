@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -15,6 +15,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'شاشة المطبخ', href: '/kitchen', icon: ChefHat },
   { label: 'الطاولات', href: '/tables', icon: TableIcon },
   { label: 'المخزون', href: '/inventory', icon: Package },
+  { label: 'الموظفين', href: '/employees', icon: UsersRound },
+  { label: 'العملاء', href: '/customers', icon: Award },
+  { label: 'التقييمات', href: '/reviews', icon: MessageSquare },
   { label: 'الطلبات', href: '/orders', icon: ListOrdered },
   { label: 'التقارير', href: '/reports', icon: BarChart3 },
 ];
@@ -232,4 +235,63 @@ export let DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [
         orderDate: new Date('2024-05-10'),
         expectedDeliveryDate: new Date('2024-05-15'),
     }
+];
+
+// Employee Management Types
+export type EmployeeRole = "كاشير" | "مقدم طعام" | "شيف" | "مدير" | "عامل نظافة" | "محاسب";
+export const EMPLOYEE_ROLES: EmployeeRole[] = ["كاشير", "مقدم طعام", "شيف", "مدير", "عامل نظافة", "محاسب"];
+
+export interface Employee {
+  id: string;
+  name: string;
+  role: EmployeeRole;
+  phone: string;
+  email?: string;
+  salary?: number;
+  hireDate: Date; // Use string for form input, Date for storage/logic
+}
+
+export let DUMMY_EMPLOYEES: Employee[] = [
+  { id: 'emp1', name: 'أحمد خالد', role: 'مدير', phone: '0501112233', email: 'ahmad.k@example.com', salary: 7000, hireDate: new Date('2023-01-15') },
+  { id: 'emp2', name: 'سارة علي', role: 'شيف', phone: '0502223344', salary: 6000, hireDate: new Date('2023-03-01') },
+  { id: 'emp3', name: 'محمد عبدالله', role: 'كاشير', phone: '0503334455', email: 'mohamed.a@example.com', salary: 4500, hireDate: new Date('2023-05-20') },
+  { id: 'emp4', name: 'فاطمة حسين', role: 'مقدم طعام', phone: '0504445566', salary: 4000, hireDate: new Date('2023-06-10') },
+];
+
+
+// Customer Management Types
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  loyaltyPoints: number;
+  joinDate: Date; // Use string for form input, Date for storage/logic
+  totalSpent?: number; 
+  notes?: string;
+}
+
+export let DUMMY_CUSTOMERS: Customer[] = [
+  { id: 'cust1', name: 'خالد الغامدي', phone: '0551234567', email: 'khalid.g@example.com', loyaltyPoints: 150, joinDate: new Date('2023-02-10'), totalSpent: 1250.75 },
+  { id: 'cust2', name: 'نورة السبيعي', phone: '0557654321', loyaltyPoints: 85, joinDate: new Date('2023-08-05'), totalSpent: 730.50 },
+  { id: 'cust3', name: 'عبدالرحمن الشهري', phone: '0555555555', email: 'abdul.s@example.com', loyaltyPoints: 220, joinDate: new Date('2022-11-20'), totalSpent: 2100.00, notes: 'يفضل القهوة التركية' },
+];
+
+
+// Review Management Types
+export interface Review {
+  id: string;
+  customerName: string; 
+  rating: number; // 1 to 5
+  comment?: string;
+  reviewDate: Date; // Use string for form input, Date for storage/logic
+  orderId?: string; 
+  menuItemName?: string;
+}
+
+export let DUMMY_REVIEWS: Review[] = [
+  { id: 'rev1', customerName: 'خالد الغامدي', rating: 5, comment: 'القهوة ممتازة والخدمة سريعة!', reviewDate: new Date('2024-05-01'), orderId: 'o1', menuItemName: 'اسبريسو' },
+  { id: 'rev2', customerName: 'نورة السبيعي', rating: 4, comment: 'المكان جميل وهادئ، التشيز برجر كان جيد.', reviewDate: new Date('2024-04-28'), orderId: 'o2', menuItemName: 'تشيز برجر' },
+  { id: 'rev3', customerName: 'زائر', rating: 3, comment: 'الشيشة كانت تحتاج فحم زيادة.', reviewDate: new Date('2024-04-25') },
+  { id: 'rev4', customerName: 'عبدالرحمن الشهري', rating: 5, comment: 'كل شيء رائع كالعادة، أفضل كابتشينو في المدينة.', reviewDate: new Date('2024-05-03'), menuItemName: 'كابتشينو' },
 ];
