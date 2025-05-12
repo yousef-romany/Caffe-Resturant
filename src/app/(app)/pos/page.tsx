@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, DUMMY_ORDERS, type Order, type OrderType, DUMMY_TABLES, type Table, OrderStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
-import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer, Percent } from 'lucide-react';
+import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer, Percent, Store, Car, Utensils } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Badge } from '@/components/ui/badge'; // Added Badge import
+import { Badge } from '@/components/ui/badge'; 
 
 const invoiceLabels = {
   ar: {
@@ -79,6 +79,10 @@ const invoiceLabels = {
     applyDiscount: "تطبيق الخصم",
     applyVAT: `تطبيق ضريبة القيمة المضافة (${DEFAULT_VAT_PERCENTAGE}%)`,
     discountPercentage: "نسبة الخصم (%)",
+    orderTypeLabel: "نوع الطلب",
+    dineIn: "صالة",
+    takeAway: "سفري",
+    delivery: "توصيل",
   },
   en: {
     invoiceTitle: "Order Invoice",
@@ -120,6 +124,10 @@ const invoiceLabels = {
     applyDiscount: "Apply Discount",
     applyVAT: `Apply VAT (${DEFAULT_VAT_PERCENTAGE}%)`,
     discountPercentage: "Discount Percentage (%)",
+    orderTypeLabel: "Order Type",
+    dineIn: "Dine-in",
+    takeAway: "Takeaway",
+    delivery: "Delivery",
   },
 };
 
@@ -145,7 +153,7 @@ export default function POSPage() {
   const [isDiscountEnabled, setIsDiscountEnabled] = useState(false);
   const [discountPercentage, setDiscountPercentage] = useState(0);
   const [isVatEnabled, setIsVatEnabled] = useState(false);
-  const vatPercentage = DEFAULT_VAT_PERCENTAGE; // Fixed VAT for now
+  const vatPercentage = DEFAULT_VAT_PERCENTAGE; 
 
 
   const { toast } = useToast();
@@ -571,19 +579,35 @@ export default function POSPage() {
           
           {isClient && (
             <>
-            <div className="space-y-3 p-4 border-t">
+            <div className="space-y-4 p-4 border-t">
               <div>
-                <Label htmlFor="orderType">نوع الطلب</Label>
-                <Select value={orderType} onValueChange={handleOrderTypeChange} disabled={!!searchParams.get('table')}>
-                  <SelectTrigger id="orderType" className="mt-1">
-                    <SelectValue placeholder="اختر نوع الطلب" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="صالة">صالة</SelectItem>
-                    <SelectItem value="سفري">سفري</SelectItem>
-                    <SelectItem value="توصيل">توصيل</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="mb-2 block">{currentLabels.orderTypeLabel}</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button 
+                    variant={orderType === 'صالة' ? 'default' : 'outline'} 
+                    onClick={() => handleOrderTypeChange('صالة')}
+                    disabled={!!searchParams.get('table')}
+                    className="flex-1"
+                  >
+                    <Store className="h-4 w-4 me-2" /> {currentLabels.dineIn}
+                  </Button>
+                  <Button 
+                    variant={orderType === 'سفري' ? 'default' : 'outline'} 
+                    onClick={() => handleOrderTypeChange('سفري')}
+                    disabled={!!searchParams.get('table')}
+                     className="flex-1"
+                  >
+                    <Utensils className="h-4 w-4 me-2" /> {currentLabels.takeAway}
+                  </Button>
+                  <Button 
+                    variant={orderType === 'توصيل' ? 'default' : 'outline'} 
+                    onClick={() => handleOrderTypeChange('توصيل')}
+                    disabled={!!searchParams.get('table')}
+                     className="flex-1"
+                  >
+                    <Car className="h-4 w-4 me-2" /> {currentLabels.delivery}
+                  </Button>
+                </div>
               </div>
 
               {orderType === 'صالة' && (
@@ -630,7 +654,6 @@ export default function POSPage() {
                   <Textarea id="generalOrderNotes" value={generalOrderNotes} onChange={(e) => setGeneralOrderNotes(e.target.value)} placeholder={currentLabels.notesPlaceholder} className="mt-1"/>
               </div>
 
-              {/* Discount and VAT Section */}
               <Separator className="my-3" />
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -711,11 +734,11 @@ export default function POSPage() {
           <DialogContent className="sm:max-w-lg printable-area" dir={invoiceLanguage === 'en' ? 'ltr' : 'rtl'}>
             <div className="printable-invoice-content">
               <DialogHeader>
-                 <h1 className="dialog-title-print"> {/* Added class for print styling */}
+                 <h1 className="dialog-title-print"> 
                   <Receipt className="h-6 w-6 text-primary inline me-2"/>
                   {currentLabels.invoiceTitle}: {confirmedOrder.orderNumber}
                  </h1>
-                <p className="dialog-description-print"> {/* Added class for print styling */}
+                <p className="dialog-description-print"> 
                   {currentLabels.date}: {format(new Date(confirmedOrder.createdAt), 'PPpp', { locale: invoiceLanguage === 'ar' ? arSA : enUS })}
                 </p>
               </DialogHeader>
@@ -794,7 +817,7 @@ export default function POSPage() {
                     const tableIdx = DUMMY_TABLES.findIndex(t => t.number === confirmedOrder.tableNumber);
                     if (tableIdx !== -1) {
                        DUMMY_TABLES[tableIdx].status = 'تحتاج تنظيف';
-                       DUMMY_TABLES[tableIdx].orderId = undefined; // Clear orderId from table
+                       DUMMY_TABLES[tableIdx].orderId = undefined; 
                     }
                   }
                   toast({title: "تمت المحاسبة بنجاح"}); 
@@ -809,4 +832,3 @@ export default function POSPage() {
     </>
   );
 }
-
