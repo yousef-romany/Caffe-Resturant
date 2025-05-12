@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from "react";
@@ -110,17 +111,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 shadow-sm backdrop-blur-md md:px-6">
-          <div className="w-[100px] h-full bg-red-500"></div>
-          <div className="flex">
-            <div className="flex items-center gap-2 md:hidden">
-              <SidebarTrigger />
-            </div>
-            <div className="flex flex-1 items-center justify-start gap-4">
-              {" "}
-              {/* Changed to justify-start for RTL */}
-              <ThemeToggle />
-              <UserNav />
-            </div>
+          {/* SidebarTrigger is on the right (start) in RTL */}
+          <div className="flex items-center gap-2">
+            <SidebarTrigger />
+          </div>
+          
+          {/* ThemeToggle and UserNav are on the left (end) in RTL */}
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <UserNav />
           </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
