@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { DUMMY_PURCHASE_ORDERS, DUMMY_SUPPLIERS, DUMMY_INGREDIENTS, type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient, type IngredientUnit, type PurchaseOrderStatus } from '@/constants';
+import { DUMMY_PURCHASE_ORDERS, DUMMY_SUPPLIERS, DUMMY_INGREDIENTS, type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient, type IngredientUnit, type PurchaseOrderStatus, INGREDIENT_UNITS } from '@/constants';
 import { PlusCircle, Edit, Trash2, ListChecks, PackagePlus, X, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -89,7 +89,7 @@ export default function PurchaseOrdersPage() {
   const handleAddItemToPO = () => {
     setNewPurchaseOrderData(prev => ({
       ...prev,
-      items: [...prev.items, { ingredientId: '', ingredientName: '', quantity: 1, costPerUnit: 0, unit: 'قطعة' }]
+      items: [...prev.items, { ingredientId: '', ingredientName: '', quantity: 1, costPerUnit: 0, unit: INGREDIENT_UNITS[0] }]
     }));
   };
 
@@ -101,7 +101,7 @@ export default function PurchaseOrdersPage() {
           if (field === 'ingredientId') {
             const selectedIngredient = ingredients.find(ing => ing.id === value);
             updatedItem.ingredientName = selectedIngredient ? selectedIngredient.name : '';
-            updatedItem.unit = selectedIngredient ? selectedIngredient.unit : 'قطعة';
+            updatedItem.unit = selectedIngredient ? selectedIngredient.unit : INGREDIENT_UNITS[0];
             updatedItem.costPerUnit = selectedIngredient ? selectedIngredient.costPerUnit : 0;
           }
           if (field === 'quantity' || field === 'costPerUnit') {
@@ -367,10 +367,7 @@ export default function PurchaseOrdersPage() {
                         <SelectValue placeholder="الوحدة" />
                       </SelectTrigger>
                       <SelectContent>
-                        {DUMMY_INGREDIENTS.find(i => i.id === item.ingredientId)?.unit ? 
-                          <SelectItem value={DUMMY_INGREDIENTS.find(i => i.id === item.ingredientId)!.unit}>{DUMMY_INGREDIENTS.find(i => i.id === item.ingredientId)!.unit}</SelectItem>
-                          : ["جرام", "كيلوجرام", "مللي لتر", "لتر", "قطعة"].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)
-                        }
+                        {INGREDIENT_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
