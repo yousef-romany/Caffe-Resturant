@@ -164,25 +164,25 @@ export default function POSPage() {
 
   const availableTables = useMemo(() => {
     const tableNumFromQuery = searchParams.get('table');
-    if (tableNumFromQuery) {
+    if (tableNumFromQuery && !currentOrderId) { // Only filter for new orders on a specific table
       const currentTable = DUMMY_TABLES.find(t => t.number === tableNumFromQuery);
       return currentTable ? [currentTable] : [];
     }
-    return DUMMY_TABLES.filter(table => table.status === 'متاحة');
-  }, [searchParams]); 
+    // If editing or creating a general order, show all available tables
+    return DUMMY_TABLES.filter(table => table.status === 'متاحة' || table.number === tableNumber); // include current table if already set
+  }, [searchParams, currentOrderId, tableNumber]); 
 
   useEffect(() => {
     const tableNumFromQuery = searchParams.get('table');
     const orderIdFromQuery = searchParams.get('orderId');
 
-    if (tableNumFromQuery) {
-      setOrderType('صالة');
-      setTableNumber(tableNumFromQuery);
-      if (orderIdFromQuery) {
+    if (orderIdFromQuery) { // Editing an existing order
         setCurrentOrderId(orderIdFromQuery);
-        const existingOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery && o.tableNumber === tableNumFromQuery);
+        const existingOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery);
         if (existingOrder) {
           setCurrentOrder(existingOrder.items);
+          setOrderType(existingOrder.type);
+          if(existingOrder.type === 'صالة' && existingOrder.tableNumber) setTableNumber(existingOrder.tableNumber);
           setGeneralOrderNotes(existingOrder.notes || '');
           if(existingOrder.customerName) setCustomerName(existingOrder.customerName);
           if(existingOrder.type === 'توصيل' && existingOrder.deliveryAddress) setDeliveryAddress(existingOrder.deliveryAddress);
@@ -190,29 +190,23 @@ export default function POSPage() {
           setDiscountPercentage(existingOrder.discountPercentage || 0);
           setIsVatEnabled(!!existingOrder.vatPercentage && existingOrder.vatPercentage > 0);
         } else {
-           const newDummyOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery);
-           if(newDummyOrder){
-             setCurrentOrder(newDummyOrder.items); 
-             setGeneralOrderNotes(newDummyOrder.notes || '');
-           }
+           // If orderId in query but not found, treat as new (or show error)
+           console.warn(`Order with ID ${orderIdFromQuery} not found.`);
+           resetPOSSession(false); // Reset to a clean state
         }
-      } else {
-        setCurrentOrderId(null); 
-        setIsDiscountEnabled(false);
-        setDiscountPercentage(0);
-        setIsVatEnabled(false);
-      }
-    } else {
-      setOrderType(''); 
-      setTableNumber('');
-      setCurrentOrderId(null);
-      setCurrentOrder([]);
+    } else if (tableNumFromQuery) { // New order for a specific table
+      setOrderType('صالة');
+      setTableNumber(tableNumFromQuery);
+      setCurrentOrderId(null); 
+      setCurrentOrder([]); // Ensure fresh order
       setGeneralOrderNotes('');
       setCustomerName('');
       setDeliveryAddress('');
       setIsDiscountEnabled(false);
       setDiscountPercentage(0);
       setIsVatEnabled(false);
+    } else { // New general order (not tied to a specific table from URL)
+      resetPOSSession(false);
     }
   }, [searchParams]);
 
@@ -314,7 +308,9 @@ export default function POSPage() {
     if (navigateToTables) {
       router.push('/tables');
     } else {
-      router.replace('/pos', undefined); 
+      // Clear query params when resetting to a general POS state
+      const currentPath = router.toString().split('?')[0];
+      router.replace(currentPath, undefined); 
     }
   };
 
@@ -370,10 +366,15 @@ export default function POSPage() {
                 vatPercentage: isVatEnabled ? vatPercentage : undefined,
                 vatAmount: isVatEnabled ? vatAmount : undefined,
                 totalAmount: finalTotal,
-                status: DUMMY_ORDERS[existingOrderIndex].status === 'قيد الانتظار' ? 'قيد الانتظار' : 'قيد التجهيز', 
+                status: DUMMY_ORDERS[existingOrderIndex].status === 'قيد الانتظار' || DUMMY_ORDERS[existingOrderIndex].status === 'قيد التجهيز' || DUMMY_ORDERS[existingOrderIndex].status === 'جاهز'
+                        ? DUMMY_ORDERS[existingOrderIndex].status // Keep current active status if editing
+                        : 'قيد الانتظار', // Or default to pending if it was completed/cancelled (though UI should prevent editing those)
                 notes: generalOrderNotes.trim() || undefined,
                 customerName: customerName.trim() || undefined,
                 deliveryAddress: deliveryAddress.trim() || undefined,
+                type: orderType as OrderType, // Type might be editable if not an active table order
+                tableNumber: orderType === 'صالة' ? tableNumber.trim() : undefined,
+                updatedAt: new Date(),
             };
             orderToConfirm = DUMMY_ORDERS[existingOrderIndex];
         } else {
@@ -407,10 +408,10 @@ export default function POSPage() {
 
         if (orderType === 'صالة' && tableNumber.trim()) {
             const tableIndex = DUMMY_TABLES.findIndex(t => t.number === tableNumber.trim());
-            if (tableIndex !== -1 && DUMMY_TABLES[tableIndex].status === 'متاحة') {
+            if (tableIndex !== -1 && (DUMMY_TABLES[tableIndex].status === 'متاحة' || DUMMY_TABLES[tableIndex].status === 'محجوزة')) { // Can occupy if available or reserved
                 DUMMY_TABLES[tableIndex].status = 'مشغولة';
                 DUMMY_TABLES[tableIndex].orderId = orderToConfirm.id;
-            } else if (tableIndex !== -1 && DUMMY_TABLES[tableIndex].status !== 'متاحة'){
+            } else if (tableIndex !== -1 && DUMMY_TABLES[tableIndex].status !== 'متاحة' && DUMMY_TABLES[tableIndex].status !== 'محجوزة'){
               toast({ title: "تنبيه", description: `الطاولة ${tableNumber} ليست متاحة.`, variant: "destructive" });
               return; 
             }
@@ -420,7 +421,7 @@ export default function POSPage() {
     setConfirmedOrder(orderToConfirm);
     setIsInvoiceDialogOpen(true);
 
-    toast({ title: "تم إرسال الطلب للمطبخ", description: `طلب رقم ${orderToConfirm.orderNumber}. جاري تجهيز الفاتورة.` });
+    toast({ title: currentOrderId ? "تم تحديث الطلب" : "تم إرسال الطلب للمطبخ", description: `طلب رقم ${orderToConfirm.orderNumber}. جاري تجهيز الفاتورة.` });
   };
   
   const handleCloseInvoiceDialogAndClearPOS = () => {
@@ -431,6 +432,7 @@ export default function POSPage() {
   };
   
   const handleOrderTypeChange = (value: OrderType | '') => {
+    if (currentOrderId) return; // Don't allow changing type for existing orders via this control
     setOrderType(value);
     if (value !== 'صالة') {
       setTableNumber(''); 
@@ -456,9 +458,9 @@ export default function POSPage() {
   return (
     <>
       <PageHeader 
-        title={tableNumber && orderType === 'صالة' ? currentLabels.posTitleTable(tableNumber) : currentLabels.posTitleGeneral}
-        description={tableNumber && orderType === 'صالة' ? currentLabels.posDescTable(tableNumber) : currentLabels.posDescGeneral}
-        icon={(tableNumber && orderType === 'صالة') ? TableIcon : ShoppingCart}
+        title={currentOrderId && orderType ==='صالة' && tableNumber ? currentLabels.posTitleTable(tableNumber) : (searchParams.get('table') && !currentOrderId ? currentLabels.posTitleTable(searchParams.get('table')!) : currentLabels.posTitleGeneral)}
+        description={currentOrderId && orderType ==='صالة' && tableNumber ? currentLabels.posDescTable(tableNumber) : (searchParams.get('table') && !currentOrderId ? currentLabels.posDescTable(searchParams.get('table')!) : currentLabels.posDescGeneral)}
+        icon={(currentOrderId && orderType ==='صالة' && tableNumber) || (searchParams.get('table') && !currentOrderId) ? TableIcon : ShoppingCart}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
         {/* Menu Items Section */}
@@ -582,46 +584,34 @@ export default function POSPage() {
             <div className="space-y-4 p-4 border-t">
               <div>
                 <Label className="mb-2 block">{currentLabels.orderTypeLabel}</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    variant={orderType === 'صالة' ? 'default' : 'outline'} 
-                    onClick={() => handleOrderTypeChange('صالة')}
-                    disabled={!!searchParams.get('table')}
-                    className="flex-1"
+                 <Select 
+                    value={orderType} 
+                    onValueChange={(value) => handleOrderTypeChange(value as OrderType | '')}
+                    disabled={!!currentOrderId} // Disable if editing an existing order
                   >
-                    <Store className="h-4 w-4 me-2" /> {currentLabels.dineIn}
-                  </Button>
-                  <Button 
-                    variant={orderType === 'سفري' ? 'default' : 'outline'} 
-                    onClick={() => handleOrderTypeChange('سفري')}
-                    disabled={!!searchParams.get('table')}
-                     className="flex-1"
-                  >
-                    <Utensils className="h-4 w-4 me-2" /> {currentLabels.takeAway}
-                  </Button>
-                  <Button 
-                    variant={orderType === 'توصيل' ? 'default' : 'outline'} 
-                    onClick={() => handleOrderTypeChange('توصيل')}
-                    disabled={!!searchParams.get('table')}
-                     className="flex-1"
-                  >
-                    <Car className="h-4 w-4 me-2" /> {currentLabels.delivery}
-                  </Button>
-                </div>
+                    <SelectTrigger id="orderTypeSelect" disabled={!!currentOrderId}>
+                        <SelectValue placeholder="اختر نوع الطلب" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="صالة"><Store className="h-4 w-4 me-2 inline-block" /> {currentLabels.dineIn}</SelectItem>
+                        <SelectItem value="سفري"><Utensils className="h-4 w-4 me-2 inline-block" /> {currentLabels.takeAway}</SelectItem>
+                        <SelectItem value="توصيل"><Car className="h-4 w-4 me-2 inline-block" /> {currentLabels.delivery}</SelectItem>
+                    </SelectContent>
+                  </Select>
               </div>
 
               {orderType === 'صالة' && (
                 <div>
                   <Label htmlFor="tableNumber">رقم الطاولة</Label>
-                  {searchParams.get('table') ? (
+                  {(searchParams.get('table') || (currentOrderId && orderType === 'صالة')) ? ( // Disabled if editing OR new order for specific table
                      <Input id="tableNumberInput" value={tableNumber} className="mt-1" disabled />
                   ) : (
                     <Select 
                         value={tableNumber} 
                         onValueChange={setTableNumber}
-                        disabled={!!searchParams.get('table')}
+                        disabled={!!currentOrderId && orderType === 'صالة'} // Also disable if editing a dine-in order
                     >
-                      <SelectTrigger id="tableNumberSelect" className="mt-1">
+                      <SelectTrigger id="tableNumberSelect" className="mt-1" disabled={!!currentOrderId && orderType === 'صالة'}>
                         <SelectValue placeholder={availableTables.length > 0 ? "اختر طاولة" : "لا توجد طاولات متاحة"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -718,7 +708,7 @@ export default function POSPage() {
                 <Button 
                     onClick={handlePlaceOrder} 
                     className="bg-primary hover:bg-primary/90 text-primary-foreground" 
-                    disabled={currentOrder.length === 0 || (orderType === 'صالة' && !tableNumber && !searchParams.get('table') && availableTables.length === 0)}
+                    disabled={currentOrder.length === 0 || (orderType === 'صالة' && !tableNumber && !searchParams.get('table') && (!currentOrderId && availableTables.length === 0) )}
                 >
                   {currentOrderId ? 'تحديث الطلب' : 'إرسال الطلب'}
                 </Button>
@@ -812,6 +802,7 @@ export default function POSPage() {
                   const orderIndex = DUMMY_ORDERS.findIndex(o => o.id === confirmedOrder.id);
                   if (orderIndex !== -1) {
                     DUMMY_ORDERS[orderIndex].status = 'مكتمل';
+                    DUMMY_ORDERS[orderIndex].completed_at = new Date(); // Add completion timestamp
                   }
                   if (confirmedOrder.type === 'صالة' && confirmedOrder.tableNumber) {
                     const tableIdx = DUMMY_TABLES.findIndex(t => t.number === confirmedOrder.tableNumber);

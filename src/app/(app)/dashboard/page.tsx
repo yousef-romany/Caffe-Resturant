@@ -1,19 +1,38 @@
+
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_MENU_ITEMS, DUMMY_ORDERS, DUMMY_EMPLOYEES } from '@/constants';
-import { DollarSign, ShoppingBag, Users, Utensils, Wallet } from 'lucide-react'; // Added Wallet icon
+import { DUMMY_MENU_ITEMS, DUMMY_ORDERS, DUMMY_EMPLOYEES, type OrderItem, type MenuItem } from '@/constants';
+import { DollarSign, ShoppingBag, Users, Wallet, Utensils } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
-  const totalSales = DUMMY_ORDERS.filter(o => o.status === 'مكتمل').reduce((sum, order) => sum + order.totalAmount, 0);
+  const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
+  const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
   const activeOrders = DUMMY_ORDERS.filter(o => o.status === 'قيد الانتظار' || o.status === 'قيد التجهيز').length;
-  const totalMenuItems = DUMMY_MENU_ITEMS.length;
-  const totalEmployees = DUMMY_EMPLOYEES.length;
-  const placeholderCashInHand = 5750.75; // Placeholder value for cash in hand
   
-  // This is a placeholder for top selling items logic
-  const topSellingItems = DUMMY_MENU_ITEMS.slice(0, 3).map(item => ({ ...item, quantitySold: Math.floor(Math.random() * 50) + 10 }));
+  const totalEmployees = DUMMY_EMPLOYEES.length;
+  const placeholderCashInHand = 5750.75; 
+
+  const itemSales: { [itemId: string]: { name: string; quantitySold: number; totalRevenue: number } } = {};
+
+  completedOrders.forEach(order => {
+    order.items.forEach(orderItem => {
+      const menuItem = DUMMY_MENU_ITEMS.find(mi => mi.id === orderItem.id);
+      if (menuItem) {
+        if (!itemSales[menuItem.id]) {
+          itemSales[menuItem.id] = { name: menuItem.name, quantitySold: 0, totalRevenue: 0 };
+        }
+        itemSales[menuItem.id].quantitySold += orderItem.quantity;
+        // Use orderItem.price as it's the price at the time of order, which is what DUMMY_ORDERS has
+        itemSales[menuItem.id].totalRevenue += orderItem.price * orderItem.quantity; 
+      }
+    });
+  });
+
+  const topSellingItems = Object.values(itemSales)
+    .sort((a, b) => b.totalRevenue - a.totalRevenue) // Sort by revenue
+    .slice(0, 3); // Get top 3
 
 
   return (
@@ -57,7 +76,7 @@ export default function DashboardPage() {
             <Users className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalEmployees}</div> {/* Placeholder */}
+            <div className="text-2xl font-bold">{totalEmployees}</div>
             <p className="text-xs text-muted-foreground">موظف نشط</p>
           </CardContent>
         </Card>
@@ -99,13 +118,13 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
              {topSellingItems.map(item => (
-              <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
+              <div key={item.name} className="flex items-center justify-between py-2 border-b last:border-b-0">
                 <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-muted-foreground">{item.quantitySold} مبيعات</p>
+                <p className="text-sm text-muted-foreground">${item.totalRevenue.toFixed(2)} إيرادات</p>
               </div>
             ))}
              <Button variant="link" className="mt-4 p-0 text-primary hover:underline" asChild>
-              <Link href="/reports">عرض التقرير الكامل</Link>
+              <Link href="/reports/top-selling">عرض التقرير الكامل</Link>
             </Button>
           </CardContent>
         </Card>
