@@ -30,7 +30,7 @@ import { PlusCircle, Edit, Trash2, Award } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const initialNewCustomerState: Omit<Customer, 'id' | 'joinDate' | 'totalSpent'> & { joinDate: string } = {
   name: '',
@@ -47,6 +47,7 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [newCustomerData, setNewCustomerData] = useState(initialNewCustomerState);
   const { toast } = useToast();
+  const router = useRouter(); // Initialize useRouter
 
   useEffect(() => {
     setCustomers(DUMMY_CUSTOMERS);
@@ -120,6 +121,11 @@ export default function CustomersPage() {
     setIsDialogOpen(true);
   };
 
+  const handleViewCustomerDetails = (customerId: string) => {
+    localStorage.setItem('selectedCustomerId', customerId);
+    router.push('/customers/customer');
+  };
+
   return (
     <>
       <PageHeader
@@ -152,9 +158,13 @@ export default function CustomersPage() {
                 customers.map(customer => (
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">
-                      <Link href={`/customers/${customer.id}`} className="text-primary hover:underline">
+                      <Button 
+                        variant="link" 
+                        onClick={() => handleViewCustomerDetails(customer.id)}
+                        className="text-primary hover:underline p-0 h-auto"
+                      >
                         {customer.name}
-                      </Link>
+                      </Button>
                     </TableCell>
                     <TableCell>{customer.phone}</TableCell>
                     <TableCell>{customer.email || '-'}</TableCell>
@@ -230,3 +240,5 @@ export default function CustomersPage() {
     </>
   );
 }
+
+    

@@ -28,7 +28,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DUMMY_SUPPLIERS, type Supplier } from '@/constants';
 import { PlusCircle, Edit, Trash2, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const initialNewSupplierState: Omit<Supplier, 'id'> = {
   name: '',
@@ -44,6 +44,7 @@ export default function SuppliersPage() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [newSupplierData, setNewSupplierData] = useState(initialNewSupplierState);
   const { toast } = useToast();
+  const router = useRouter(); // Initialize useRouter
 
   useEffect(() => {
     setSuppliers(DUMMY_SUPPLIERS);
@@ -99,6 +100,11 @@ export default function SuppliersPage() {
     setIsDialogOpen(true);
   };
 
+  const handleViewSupplierDetails = (supplierId: string) => {
+    localStorage.setItem('selectedSupplierId', supplierId);
+    router.push('/inventory/suppliers/supplier');
+  };
+
   return (
     <>
       <PageHeader
@@ -129,9 +135,13 @@ export default function SuppliersPage() {
                 suppliers.map(supplier => (
                   <TableRow key={supplier.id}>
                     <TableCell className="font-medium">
-                       <Link href={`/inventory/suppliers/${supplier.id}`} className="text-primary hover:underline">
+                      <Button
+                        variant="link"
+                        onClick={() => handleViewSupplierDetails(supplier.id)}
+                        className="text-primary hover:underline p-0 h-auto"
+                      >
                         {supplier.name}
-                      </Link>
+                      </Button>
                     </TableCell>
                     <TableCell>{supplier.contactPerson || '-'}</TableCell>
                     <TableCell>{supplier.phone || '-'}</TableCell>
@@ -201,3 +211,5 @@ export default function SuppliersPage() {
     </>
   );
 }
+
+    
