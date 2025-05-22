@@ -9,11 +9,46 @@ export interface NavItem {
   children?: NavItem[];
 }
 
+export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
+export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
+
+// For Kitchen Display System - determines which categories a staff member sees
+// Example: ['حلويات', 'مشروبات'] means staff sees only these two sections.
+// An empty array or undefined means staff sees ALL sections.
+export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = []; // Empty = show all for now
+
+// Map categories to icons for KDS
+export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
+  "مأكولات": Sandwich,
+  "مشروبات": GlassWater,
+  "حلويات": Cake,
+  "شيشة": Flame,
+};
+
+export type CategorySlug = 'food' | 'drinks' | 'desserts' | 'hookah';
+
+export const CATEGORY_SLUG_MAP: Record<CategorySlug, { name: Category, icon: LucideIcon, slug: CategorySlug }> = {
+  'food': { name: 'مأكولات', icon: KITCHEN_CATEGORY_ICONS['مأكولات'], slug: 'food' },
+  'drinks': { name: 'مشروبات', icon: KITCHEN_CATEGORY_ICONS['مشروبات'], slug: 'drinks' },
+  'desserts': { name: 'حلويات', icon: KITCHEN_CATEGORY_ICONS['حلويات'], slug: 'desserts' },
+  'hookah': { name: 'شيشة', icon: KITCHEN_CATEGORY_ICONS['شيشة'], slug: 'hookah' },
+};
+
+
 export const NAV_ITEMS: NavItem[] = [
   { label: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard },
   { label: 'نقطة البيع', href: '/pos', icon: ShoppingCart },
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
-  { label: 'شاشة المطبخ', href: '/kitchen', icon: ChefHat },
+  {
+    label: 'شاشة المطبخ',
+    href: `/kitchen/${Object.values(CATEGORY_SLUG_MAP)[0].slug}`, // Default to first category
+    icon: ChefHat,
+    children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
+      label: catMap.name,
+      href: `/kitchen/${catMap.slug}`,
+      icon: catMap.icon,
+    })),
+  },
   { label: 'الطاولات', href: '/tables', icon: TableIcon },
   {
     label: 'المخزون',
@@ -55,22 +90,6 @@ export const SETTINGS_NAV_ITEM: NavItem = {
     { label: 'إعدادات عامة', href: '/settings', icon: Settings },
     { label: 'إدارة المستخدمين', href: '/settings/users', icon: UserCog },
   ]
-};
-
-export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
-export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
-
-// For Kitchen Display System - determines which categories a staff member sees
-// Example: ['حلويات', 'مشروبات'] means staff sees only these two sections.
-// An empty array or undefined means staff sees ALL sections.
-export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = []; // Empty = show all for now
-
-// Map categories to icons for KDS
-export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
-  "مأكولات": Sandwich, // Or Soup, Utensils
-  "مشروبات": GlassWater, // Or CoffeeIcon
-  "حلويات": Cake,
-  "شيشة": Flame, // Placeholder, as there isn't a direct hookah icon in lucide
 };
 
 
@@ -185,6 +204,26 @@ export const DUMMY_MENU_ITEMS: MenuItem[] = [
     imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي",
     cost: 2.00
   },
+  {
+    id: 'm9', name: 'عصير برتقال طازج', category: 'مشروبات', price: 4.50,
+    imageUrl: 'https://picsum.photos/200/200?image=724', dataAiHint: "orange juice", description: "عصير برتقال طازج ومعصور.",
+    cost: 1.00
+  },
+  {
+    id: 'm10', name: 'سلطة سيزر', category: 'مأكولات', price: 6.50,
+    imageUrl: 'https://picsum.photos/200/200?image=310', dataAiHint: "caesar salad", description: "سلطة سيزر كلاسيكية مع دجاج مشوي.",
+    cost: 1.80
+  },
+  {
+    id: 'm11', name: 'مولتن كيك', category: 'حلويات', price: 6.00,
+    imageUrl: 'https://picsum.photos/200/200?image=593', dataAiHint: "molten cake", description: "كيك شوكولاتة ذائبة مع آيس كريم فانيلا.",
+    cost: 1.50
+  },
+  {
+    id: 'm12', name: 'شيشة عنب نعناع', category: 'شيشة', price: 16.00,
+    imageUrl: 'https://picsum.photos/200/200?image=610', dataAiHint: "hookah flavors", description: "شيشة بنكهة العنب والنعناع.",
+    cost: 1.30
+  },
 ];
 
 
@@ -226,7 +265,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o1',
     orderNumber: 'طلب-001',
-    items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 2 }, { ...DUMMY_MENU_ITEMS[2], quantity: 1, notes: "بدون بصل" }],
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 2 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1, notes: "بدون بصل" }],
     subtotal: (2.50 * 2) + 8.00,
     totalAmount: 13.00,
     status: 'مكتمل',
@@ -240,7 +279,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o2',
     orderNumber: 'طلب-002',
-    items: [{ ...DUMMY_MENU_ITEMS[1], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1, notes: "بدون سكر إضافي"}], // كابتشينو و كيكة
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, notes: "بدون سكر إضافي"}], // كابتشينو و كيكة
     subtotal: 3.50 + 5.00,
     totalAmount: 8.50,
     status: 'قيد التجهيز',
@@ -252,7 +291,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o3',
     orderNumber: 'طلب-003',
-    items: [{ ...DUMMY_MENU_ITEMS[4], quantity: 1 }, { ...DUMMY_MENU_ITEMS[5], quantity: 1 }],
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 }],
     subtotal: 5.00 + 15.00,
     totalAmount: 20.00,
     status: 'قيد الانتظار',
@@ -265,7 +304,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o4',
     orderNumber: 'طلب-004',
-    items: [{ ...DUMMY_MENU_ITEMS[6], quantity: 2, notes: "سكر قليل" }, { ...DUMMY_MENU_ITEMS[3], quantity: 1 }],
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '7')!, quantity: 2, notes: "سكر قليل" }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '4')!, quantity: 1 }],
     subtotal: (4.00 * 2) + 3.00,
     totalAmount: 11.00,
     status: 'قيد الانتظار',
@@ -276,7 +315,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o5',
     orderNumber: 'طلب-005',
-    items: [{ ...DUMMY_MENU_ITEMS[7], quantity: 1 }, { ...DUMMY_MENU_ITEMS[0], quantity: 1, notes: "دبل شوت"}], // ساندويتش و اسبريسو
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '8')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, notes: "دبل شوت"}], // ساندويتش و اسبريسو
     subtotal: 7.50 + 2.50,
     totalAmount: 10.00,
     status: 'قيد التجهيز',
@@ -288,7 +327,7 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o6',
     orderNumber: 'طلب-006',
-    items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1 }],
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }],
     subtotal: 2.50 + 5.00,
     totalAmount: 7.50,
     status: 'جاهز',
@@ -298,6 +337,36 @@ export let DUMMY_ORDERS: Order[] = [
     kitchen_started_at: new Date(Date.now() - 700000), // ~11.6 minutes ago
     kitchen_ready_at: new Date(Date.now() - 300000) // 5 minutes ago
   },
+  {
+    id: 'o7', // Order with items from multiple categories for testing
+    orderNumber: 'طلب-007',
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1 }, // مأكولات
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 2, notes: "حليب قليل الدسم" }, // مشروبات
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }  // حلويات
+    ],
+    subtotal: 8.00 + (3.50 * 2) + 5.00,
+    totalAmount: 20.00,
+    status: 'قيد الانتظار',
+    type: 'صالة',
+    tableNumber: '1',
+    createdAt: new Date(Date.now() - 300000), // 5 minutes ago
+  },
+  {
+    id: 'o8', // Another multi-category order
+    orderNumber: 'طلب-008',
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === 'm10')!, quantity: 1 }, // مأكولات (سلطة سيزر)
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 }, // شيشة
+    ],
+    subtotal: 6.50 + 15.00,
+    totalAmount: 21.50,
+    status: 'قيد التجهيز',
+    type: 'صالة',
+    tableNumber: '9',
+    createdAt: new Date(Date.now() - 720000), // 12 minutes ago
+    kitchen_started_at: new Date(Date.now() - 420000) // 7 minutes ago
+  }
 ];
 
 
@@ -312,7 +381,7 @@ export interface Table {
 }
 
 export const DUMMY_TABLES: Table[] = [
-  { id: 't1', number: '1', status: 'متاحة', capacity: 4 },
+  { id: 't1', number: '1', status: 'مشغولة', capacity: 4, orderId: 'o7' },
   { id: 't2', number: '2', status: 'مشغولة', capacity: 2, orderId: 'o4' },
   { id: 't3', number: '3', status: 'محجوزة', capacity: 6 },
   { id: 't4', number: '4', status: 'متاحة', capacity: 4 },
@@ -320,7 +389,7 @@ export const DUMMY_TABLES: Table[] = [
   { id: 't6', number: '6', status: 'متاحة', capacity: 8 },
   { id: 't7', number: '7', status: 'متاحة', capacity: 4 },
   { id: 't8', number: '8', status: 'مشغولة', capacity: 2, orderId: 'o5' },
-  { id: 't9', number: '9', status: 'متاحة', capacity: 6 },
+  { id: 't9', number: '9', status: 'مشغولة', capacity: 6, orderId: 'o8' },
   { id: 't10', number: '10', status: 'محجوزة', capacity: 4 },
 ];
 
