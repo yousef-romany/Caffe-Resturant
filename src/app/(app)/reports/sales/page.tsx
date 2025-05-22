@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { DUMMY_ORDERS, type Order, type Category, type OrderType } from '@/constants';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, ShoppingBag, TrendingUp, CalendarDays } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -30,8 +30,30 @@ interface OrderTypeSalesData {
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
 
+const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
+  const now = new Date();
+  switch (period) {
+    case 'daily':
+      return { startDate: startOfDay(now), endDate: endOfDay(now) };
+    case 'weekly':
+      return { startDate: startOfWeek(now, { locale: arSA }), endDate: endOfWeek(now, { locale: arSA }) };
+    case 'monthly':
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+    case 'quarterly':
+      return { startDate: startOfQuarter(now), endDate: endOfQuarter(now) };
+    case 'semi_annually': // Last 6 months from the start of the first month in range
+      return { startDate: startOfMonth(subMonths(now, 5)), endDate: endOfMonth(now) };
+    case 'annually':
+      return { startDate: startOfYear(now), endDate: endOfYear(now) };
+    // case 'custom': // Needs date pickers, not implemented yet
+    default: // Default to current month
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+  }
+};
+
+
 export default function SalesReportPage() {
-  const [monthlySales, setMonthlySales] = useState<MonthlySalesData[]>([]);
+  const [monthlySalesChartData, setMonthlySalesChartData] = useState<MonthlySalesData[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySalesData[]>([]);
   const [orderTypeSales, setOrderTypeSales] = useState<OrderTypeSalesData[]>([]);
   
@@ -43,29 +65,25 @@ export default function SalesReportPage() {
 
   useEffect(() => {
     setIsClient(true);
-    const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
-    const revenue = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-    setTotalRevenue(revenue);
-    setTotalOrders(completedOrders.length);
-    setAverageOrderValue(completedOrders.length > 0 ? revenue / completedOrders.length : 0);
+  }, []);
 
-    const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-    const currentMonthIndex = new Date().getMonth();
-    const salesData: MonthlySalesData[] = Array(6).fill(null).map((_, i) => {
-        const monthIndex = (currentMonthIndex - 5 + i + 12) % 12;
-        const monthName = monthsAr[monthIndex];
-        const salesForMonth = DUMMY_ORDERS
-            .filter(o => o.status === 'مكتمل' && new Date(o.createdAt).getMonth() === monthIndex)
-            .reduce((sum, order) => sum + order.totalAmount, 0);
-        return {
-            month: monthName,
-            sales: salesForMonth > 0 ? salesForMonth : Math.floor(Math.random() * 1500) + 500, 
-        };
+  useEffect(() => {
+    if (!isClient) return;
+
+    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+
+    const filteredOrdersForPeriod = DUMMY_ORDERS.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate && order.status === 'مكتمل';
     });
-    setMonthlySales(salesData);
+
+    const revenue = filteredOrdersForPeriod.reduce((sum, order) => sum + order.totalAmount, 0);
+    setTotalRevenue(revenue);
+    setTotalOrders(filteredOrdersForPeriod.length);
+    setAverageOrderValue(filteredOrdersForPeriod.length > 0 ? revenue / filteredOrdersForPeriod.length : 0);
 
     const catSales: { [key in Category]?: number } = {};
-    completedOrders.forEach(order => {
+    filteredOrdersForPeriod.forEach(order => {
       order.items.forEach(item => {
         catSales[item.category] = (catSales[item.category] || 0) + (item.price * item.quantity);
       });
@@ -77,7 +95,7 @@ export default function SalesReportPage() {
     );
     
     const otSales: { [key in OrderType]?: number } = {};
-    completedOrders.forEach(order => {
+    filteredOrdersForPeriod.forEach(order => {
         otSales[order.type] = (otSales[order.type] || 0) + order.totalAmount;
     });
     setOrderTypeSales(
@@ -86,11 +104,49 @@ export default function SalesReportPage() {
         .sort((a,b) => b.value - a.value)
     );
 
-  }, [selectedPeriod]);
+    // Monthly sales chart data (always last 6 months for this specific chart)
+    const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+    const currentMonthDate = new Date();
+    const salesChartData: MonthlySalesData[] = Array(6).fill(null).map((_, i) => {
+        const targetMonthDate = subMonths(currentMonthDate, 5 - i);
+        const monthIndex = targetMonthDate.getMonth();
+        const year = targetMonthDate.getFullYear();
+        const monthName = monthsAr[monthIndex];
+
+        const salesForMonth = DUMMY_ORDERS
+            .filter(o => {
+                const orderDate = new Date(o.createdAt);
+                return o.status === 'مكتمل' && 
+                       isValid(orderDate) &&
+                       orderDate.getMonth() === monthIndex &&
+                       orderDate.getFullYear() === year;
+            })
+            .reduce((sum, order) => sum + order.totalAmount, 0);
+        return {
+            month: `${monthName} ${year}`, // Add year for clarity
+            sales: salesForMonth, 
+        };
+    });
+    setMonthlySalesChartData(salesChartData);
+
+  }, [selectedPeriod, isClient]);
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
   };
+  
+  const getPeriodLabel = () => {
+    switch(selectedPeriod) {
+        case 'daily': return 'اليوم الحالي';
+        case 'weekly': return 'الأسبوع الحالي';
+        case 'monthly': return 'الشهر الحالي';
+        case 'quarterly': return 'الربع الحالي';
+        case 'semi_annually': return 'آخر 6 أشهر';
+        case 'annually': return 'السنة الحالية';
+        default: return 'الفترة المختارة';
+    }
+  };
+
 
   if (!isClient) {
     return (
@@ -105,7 +161,7 @@ export default function SalesReportPage() {
     <>
       <PageHeader 
         title="تقرير المبيعات" 
-        description="تحليل أداء المبيعات لفترات مختلفة." 
+        description={`تحليل أداء المبيعات لـ ${getPeriodLabel()}.`} 
         icon={TrendingUp}
         actions={
           <div className="flex items-center gap-2">
@@ -115,13 +171,13 @@ export default function SalesReportPage() {
                 <SelectValue placeholder="اختر الفترة" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="daily">يومي (هذا اليوم)</SelectItem>
-                <SelectItem value="weekly">أسبوعي (هذا الأسبوع)</SelectItem>
-                <SelectItem value="monthly">شهري (هذا الشهر)</SelectItem>
-                <SelectItem value="quarterly">ربع سنوي (هذا الربع)</SelectItem>
-                <SelectItem value="semi_annually">نصف سنوي</SelectItem>
+                <SelectItem value="daily">يومي</SelectItem>
+                <SelectItem value="weekly">أسبوعي</SelectItem>
+                <SelectItem value="monthly">شهري</SelectItem>
+                <SelectItem value="quarterly">ربع سنوي</SelectItem>
+                <SelectItem value="semi_annually">نصف سنوي (آخر 6 أشهر)</SelectItem>
                 <SelectItem value="annually">سنوي</SelectItem>
-                <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem>
+                {/* <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem> */}
               </SelectContent>
             </Select>
           </div>
@@ -130,7 +186,7 @@ export default function SalesReportPage() {
 
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="text-xl">ملخص المبيعات ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+            <CardTitle className="text-xl">ملخص المبيعات ({getPeriodLabel()})</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card className="shadow-md">
@@ -140,7 +196,7 @@ export default function SalesReportPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">لجميع الطلبات المكتملة</p>
+                <p className="text-xs text-muted-foreground">لجميع الطلبات المكتملة في الفترة</p>
             </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -150,7 +206,7 @@ export default function SalesReportPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{totalOrders}</div>
-                <p className="text-xs text-muted-foreground">الطلبات المكتملة</p>
+                <p className="text-xs text-muted-foreground">الطلبات المكتملة في الفترة</p>
             </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -160,7 +216,7 @@ export default function SalesReportPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${averageOrderValue.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">متوسط كل طلب مكتمل</p>
+                <p className="text-xs text-muted-foreground">متوسط كل طلب مكتمل في الفترة</p>
             </CardContent>
             </Card>
         </CardContent>
@@ -169,12 +225,12 @@ export default function SalesReportPage() {
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 mb-8">
         <Card className="shadow-lg col-span-1 lg:col-span-2">
           <CardHeader>
-            <CardTitle>نظرة عامة على المبيعات الشهرية</CardTitle>
-            <CardDescription>أداء المبيعات خلال آخر 6 أشهر.</CardDescription>
+            <CardTitle>نظرة عامة على المبيعات الشهرية (آخر 6 أشهر)</CardTitle>
+            <CardDescription>أداء المبيعات خلال آخر 6 أشهر بغض النظر عن الفلتر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] ps-0">
             <ResponsiveContainer width="100%" height="100%">
-              <RechartsBarChart data={monthlySales} layout="vertical" margin={{ right: 30, left: 20 }}>
+              <RechartsBarChart data={monthlySalesChartData} layout="vertical" margin={{ right: 30, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${value}`} />
                 <YAxis type="category" dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} width={80}/>
@@ -192,74 +248,83 @@ export default function SalesReportPage() {
         
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>المبيعات حسب الفئة</CardTitle>
+            <CardTitle>المبيعات حسب الفئة ({getPeriodLabel()})</CardTitle>
             <CardDescription>توزيع الإيرادات عبر فئات العناصر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categorySales}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent, value }) => `${name} (${(percent * 100).toFixed(0)}%) - $${value.toFixed(0)}`}
-                  outerRadius={100}
-                  innerRadius={60}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="hsl(var(--border))"
-                >
-                  {categorySales.map((entry, index) => (
-                    <Cell key={`cell-cat-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
-              </PieChart>
-            </ResponsiveContainer>
+            {categorySales.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                    data={categorySales}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent, value }) => `${name} (${(percent * 100).toFixed(0)}%) - $${value.toFixed(0)}`}
+                    outerRadius={100}
+                    innerRadius={60}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="hsl(var(--border))"
+                    >
+                    {categorySales.map((entry, index) => (
+                        <Cell key={`cell-cat-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                    </Pie>
+                    <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+                    formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
+                </PieChart>
+                </ResponsiveContainer>
+            ) : (
+                <p className="text-center text-muted-foreground pt-10">لا توجد بيانات مبيعات حسب الفئة لهذه الفترة.</p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>المبيعات حسب نوع الطلب</CardTitle>
+            <CardTitle>المبيعات حسب نوع الطلب ({getPeriodLabel()})</CardTitle>
             <CardDescription>توزيع الإيرادات عبر أنواع الطلبات.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={orderTypeSales}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent, value }) => `${name} (${(percent * 100).toFixed(0)}%) - $${value.toFixed(0)}`}
-                  outerRadius={100}
-                  innerRadius={60}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="hsl(var(--border))"
-                >
-                  {orderTypeSales.map((entry, index) => (
-                    <Cell key={`cell-type-${index}`} fill={COLORS[(index + categorySales.length) % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                  formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
-              </PieChart>
-            </ResponsiveContainer>
+             {orderTypeSales.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                    data={orderTypeSales}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent, value }) => `${name} (${(percent * 100).toFixed(0)}%) - $${value.toFixed(0)}`}
+                    outerRadius={100}
+                    innerRadius={60}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="hsl(var(--border))"
+                    >
+                    {orderTypeSales.map((entry, index) => (
+                        <Cell key={`cell-type-${index}`} fill={COLORS[(index + categorySales.length) % COLORS.length]} />
+                    ))}
+                    </Pie>
+                    <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+                    formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
+                </PieChart>
+                </ResponsiveContainer>
+             ) : (
+                <p className="text-center text-muted-foreground pt-10">لا توجد بيانات مبيعات حسب نوع الطلب لهذه الفترة.</p>
+             )}
           </CardContent>
         </Card>
       </div>
     </>
   );
 }
+
