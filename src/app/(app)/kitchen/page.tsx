@@ -9,19 +9,24 @@ import { Button } from '@/components/ui/button';
 import { DUMMY_ORDERS, type Order, type OrderStatus, type OrderItem, ITEM_CATEGORIES, KITCHEN_CATEGORY_ICONS, CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES, type Category } from '@/constants';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { ChefHat, CheckCircle2, CookingPot, Clock } from 'lucide-react';
+import { ChefHat, CheckCircle2, CookingPot, Clock, AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import type { LucideIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
+const PENDING_LATE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const PREPARING_LATE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
 interface KitchenOrderCardProps {
   order: Order;
   onStartPreparing: (orderId: string) => void;
   onMarkAsReady: (orderId: string) => void;
-  displayCategory?: Category; // Only show items of this category
+  displayCategory?: Category;
+  isLate: boolean;
 }
 
-function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCategory }: KitchenOrderCardProps) {
+function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCategory, isLate }: KitchenOrderCardProps) {
   const [timeAgo, setTimeAgo] = useState('');
 
   useEffect(() => {
@@ -38,15 +43,18 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
     : order.items;
 
   if (itemsToDisplay.length === 0) {
-    return null; // Don't render the card if no items match the display category for this order
+    return null;
   }
 
   return (
-    <Card className="shadow-lg flex flex-col h-full">
+    <Card className={`shadow-lg flex flex-col h-full ${isLate ? 'border-destructive border-2' : ''}`}>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex justify-between items-center">
           <span>{order.orderNumber}</span>
-          <span className="text-sm font-normal text-muted-foreground">{timeAgo}</span>
+          <div className="flex items-center gap-2">
+            {isLate && <Badge variant="destructive" className="flex items-center gap-1"><AlertTriangle className="h-3 w-3"/> متأخر</Badge>}
+            <span className="text-sm font-normal text-muted-foreground">{timeAgo}</span>
+          </div>
         </CardTitle>
         <CardDescription>
           {order.type}
@@ -100,17 +108,36 @@ export default function KitchenPage() {
   }, []);
 
   const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+    const now = new Date();
     setOrders(prevOrders =>
-      prevOrders.map(order =>
-        order.id === orderId ? { ...order, status: newStatus } : order
-      )
+      prevOrders.map(order => {
+        if (order.id === orderId) {
+          const updatedOrder = { ...order, status: newStatus, updatedAt: now };
+          if (newStatus === 'قيد التجهيز') {
+            updatedOrder.kitchen_started_at = now;
+          } else if (newStatus === 'جاهز') {
+            updatedOrder.kitchen_ready_at = now;
+            if (!updatedOrder.kitchen_started_at) { // If somehow started_at wasn't set
+              updatedOrder.kitchen_started_at = updatedOrder.createdAt; // Fallback
+            }
+          }
+          return updatedOrder;
+        }
+        return order;
+      })
     );
-    // Update DUMMY_ORDERS to reflect changes, simulating backend update
+    
     const orderIndex = DUMMY_ORDERS.findIndex(o => o.id === orderId);
     if (orderIndex !== -1) {
       DUMMY_ORDERS[orderIndex].status = newStatus;
-      if (newStatus === 'قيد التجهيز') DUMMY_ORDERS[orderIndex].kitchen_started_at = new Date();
-      if (newStatus === 'جاهز') DUMMY_ORDERS[orderIndex].kitchen_ready_at = new Date();
+      DUMMY_ORDERS[orderIndex].updatedAt = now;
+      if (newStatus === 'قيد التجهيز') DUMMY_ORDERS[orderIndex].kitchen_started_at = now;
+      if (newStatus === 'جاهز') {
+        DUMMY_ORDERS[orderIndex].kitchen_ready_at = now;
+        if (!DUMMY_ORDERS[orderIndex].kitchen_started_at) {
+            DUMMY_ORDERS[orderIndex].kitchen_started_at = DUMMY_ORDERS[orderIndex].createdAt;
+        }
+      }
     }
   };
 
@@ -153,6 +180,18 @@ export default function KitchenPage() {
     return result;
   }, [orders, categoriesToDisplay]);
 
+  const checkIsLate = (order: Order): boolean => {
+    const now = Date.now();
+    if (order.status === 'قيد الانتظار') {
+      return (now - new Date(order.createdAt).getTime()) > PENDING_LATE_THRESHOLD_MS;
+    }
+    if (order.status === 'قيد التجهيز') {
+      const startTime = order.kitchen_started_at ? new Date(order.kitchen_started_at).getTime() : new Date(order.createdAt).getTime();
+      return (now - startTime) > PREPARING_LATE_THRESHOLD_MS;
+    }
+    return false;
+  };
+
 
   if (!isClient) {
     return (
@@ -181,7 +220,6 @@ export default function KitchenPage() {
               </div>
               
               <div className="flex-grow space-y-4">
-                {/* Pending Orders for this category */}
                 {pendingForCategory.length > 0 && (
                   <div>
                     <h3 className="text-md font-medium text-yellow-600 mb-2 flex items-center"><Clock className="h-5 w-5 me-2"/> طلبات جديدة ({pendingForCategory.length})</h3>
@@ -194,6 +232,7 @@ export default function KitchenPage() {
                             onStartPreparing={handleStartPreparing}
                             onMarkAsReady={handleMarkAsReady}
                             displayCategory={category}
+                            isLate={checkIsLate(order)}
                           />
                         ))}
                       </div>
@@ -201,7 +240,6 @@ export default function KitchenPage() {
                   </div>
                 )}
 
-                {/* Preparing Orders for this category */}
                 {preparingForCategory.length > 0 && (
                   <div>
                      <h3 className="text-md font-medium text-blue-600 mb-2 flex items-center"><CookingPot className="h-5 w-5 me-2"/> طلبات قيد التجهيز ({preparingForCategory.length})</h3>
@@ -214,6 +252,7 @@ export default function KitchenPage() {
                             onStartPreparing={handleStartPreparing}
                             onMarkAsReady={handleMarkAsReady}
                             displayCategory={category}
+                            isLate={checkIsLate(order)}
                           />
                         ))}
                       </div>
@@ -239,3 +278,4 @@ export default function KitchenPage() {
     </>
   );
 }
+

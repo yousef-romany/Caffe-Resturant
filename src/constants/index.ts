@@ -215,6 +215,8 @@ export interface Order {
   createdAt: Date;
   updatedAt?: Date;
   completed_at?: Date;
+  kitchen_started_at?: Date;
+  kitchen_ready_at?: Date;
 }
 
 export const DEFAULT_VAT_PERCENTAGE = 14;
@@ -230,7 +232,9 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'مكتمل',
     type: 'صالة',
     tableNumber: '5',
-    createdAt: new Date(Date.now() - 3600000 * 3),
+    createdAt: new Date(Date.now() - 3600000 * 3), // 3 hours ago
+    kitchen_started_at: new Date(Date.now() - 3600000 * 2.9),
+    kitchen_ready_at: new Date(Date.now() - 3600000 * 2.7),
     completed_at: new Date(Date.now() - 3600000 * 2.5)
   },
   {
@@ -242,7 +246,8 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'قيد التجهيز',
     type: 'سفري',
     customerName: 'أحمد محمود',
-    createdAt: new Date(Date.now() - 3600000 * 2)
+    createdAt: new Date(Date.now() - 1200000), // 20 minutes ago
+    kitchen_started_at: new Date(Date.now() - 600000) // 10 minutes ago
   },
   {
     id: 'o3',
@@ -255,7 +260,7 @@ export let DUMMY_ORDERS: Order[] = [
     customerName: 'فاطمة علي',
     deliveryAddress: '123 الشارع الرئيسي, المدينة',
     captainName: 'جون دو',
-    createdAt: new Date(Date.now() - 3600000 * 1)
+    createdAt: new Date(Date.now() - 360000) // 6 minutes ago
   },
   {
     id: 'o4',
@@ -266,7 +271,7 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'قيد الانتظار',
     type: 'صالة',
     tableNumber: '2',
-    createdAt: new Date()
+    createdAt: new Date(Date.now() - 60000) // 1 minute ago
   },
   {
     id: 'o5',
@@ -277,7 +282,8 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '8',
-    createdAt: new Date(Date.now() - 1800000)
+    createdAt: new Date(Date.now() - 1800000), // 30 minutes ago
+    kitchen_started_at: new Date(Date.now() - 900000) // 15 minutes ago
   },
   {
     id: 'o6',
@@ -288,7 +294,9 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'جاهز',
     type: 'سفري',
     customerName: 'سارة إبراهيم',
-    createdAt: new Date(Date.now() - 900000)
+    createdAt: new Date(Date.now() - 900000), // 15 minutes ago
+    kitchen_started_at: new Date(Date.now() - 700000), // ~11.6 minutes ago
+    kitchen_ready_at: new Date(Date.now() - 300000) // 5 minutes ago
   },
 ];
 
