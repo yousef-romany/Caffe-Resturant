@@ -30,6 +30,7 @@ import { PlusCircle, Edit, Trash2, Award } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import Link from 'next/link';
 
 const initialNewCustomerState: Omit<Customer, 'id' | 'joinDate' | 'totalSpent'> & { joinDate: string } = {
   name: '',
@@ -150,7 +151,11 @@ export default function CustomersPage() {
               {customers.length > 0 ? (
                 customers.map(customer => (
                   <TableRow key={customer.id}>
-                    <TableCell className="font-medium">{customer.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/customers/${customer.id}`} className="text-primary hover:underline">
+                        {customer.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{customer.phone}</TableCell>
                     <TableCell>{customer.email || '-'}</TableCell>
                     <TableCell className="text-center">{customer.loyaltyPoints}</TableCell>

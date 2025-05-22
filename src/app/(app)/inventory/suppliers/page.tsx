@@ -28,6 +28,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { DUMMY_SUPPLIERS, type Supplier } from '@/constants';
 import { PlusCircle, Edit, Trash2, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 const initialNewSupplierState: Omit<Supplier, 'id'> = {
   name: '',
@@ -62,6 +63,8 @@ export default function SuppliersPage() {
     if (editingSupplier) {
       const updatedSupplier = { ...editingSupplier, ...newSupplierData };
       setSuppliers(suppliers.map(sup => sup.id === editingSupplier.id ? updatedSupplier : sup));
+      const indexToUpdate = DUMMY_SUPPLIERS.findIndex(s => s.id === editingSupplier.id);
+      if (indexToUpdate !== -1) DUMMY_SUPPLIERS[indexToUpdate] = updatedSupplier;
       toast({ title: "نجاح", description: `تم تحديث ${updatedSupplier.name}.` });
     } else {
       const newSupplierWithId: Supplier = {
@@ -69,6 +72,7 @@ export default function SuppliersPage() {
         id: `sup-${Date.now()}`,
       };
       setSuppliers([newSupplierWithId, ...suppliers]);
+      DUMMY_SUPPLIERS.unshift(newSupplierWithId);
       toast({ title: "نجاح", description: `تمت إضافة ${newSupplierWithId.name}.` });
     }
     setIsDialogOpen(false);
@@ -83,8 +87,9 @@ export default function SuppliersPage() {
   };
 
   const handleDeleteSupplier = (supplierToDelete: Supplier) => {
-    // Add confirmation dialog in real app
     setSuppliers(suppliers.filter(sup => sup.id !== supplierToDelete.id));
+    const indexToDelete = DUMMY_SUPPLIERS.findIndex(s => s.id === supplierToDelete.id);
+    if (indexToDelete !== -1) DUMMY_SUPPLIERS.splice(indexToDelete, 1);
     toast({ title: "نجاح", description: `تم حذف ${supplierToDelete.name}.`, variant: "destructive" });
   };
 
@@ -123,7 +128,11 @@ export default function SuppliersPage() {
               {suppliers.length > 0 ? (
                 suppliers.map(supplier => (
                   <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">{supplier.name}</TableCell>
+                    <TableCell className="font-medium">
+                       <Link href={`/inventory/suppliers/${supplier.id}`} className="text-primary hover:underline">
+                        {supplier.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{supplier.contactPerson || '-'}</TableCell>
                     <TableCell>{supplier.phone || '-'}</TableCell>
                     <TableCell>{supplier.email || '-'}</TableCell>
@@ -164,19 +173,19 @@ export default function SuppliersPage() {
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="contactPerson" className="text-left">شخص الاتصال</Label>
-              <Input id="contactPerson" name="contactPerson" value={newSupplierData.contactPerson} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
+              <Input id="contactPerson" name="contactPerson" value={newSupplierData.contactPerson || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="phone" className="text-left">الهاتف</Label>
-              <Input id="phone" name="phone" type="tel" value={newSupplierData.phone} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
+              <Input id="phone" name="phone" type="tel" value={newSupplierData.phone || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="email" className="text-left">البريد الإلكتروني</Label>
-              <Input id="email" name="email" type="email" value={newSupplierData.email} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
+              <Input id="email" name="email" type="email" value={newSupplierData.email || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-start gap-4">
               <Label htmlFor="address" className="text-left pt-2">العنوان</Label>
-              <Textarea id="address" name="address" value={newSupplierData.address} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
+              <Textarea id="address" name="address" value={newSupplierData.address || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
             </div>
           </div>
           <DialogFooter>
