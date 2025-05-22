@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -27,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: 'الموظفين', href: '/employees', icon: UsersRound },
+  { label: 'سجل الحضور', href: '/attendance', icon: CalendarClock },
   { label: 'العملاء', href: '/customers', icon: Award },
   { label: 'التقييمات', href: '/reviews', icon: MessageSquare },
   { label: 'سجل الطلبات', href: '/orders', icon: ListOrdered },
@@ -46,7 +47,15 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export const SETTINGS_NAV_ITEM: NavItem = { label: 'الإعدادات', href: '/settings', icon: Settings };
+export const SETTINGS_NAV_ITEM: NavItem = { 
+  label: 'الإعدادات', 
+  href: '/settings', 
+  icon: Settings,
+  children: [
+    { label: 'إعدادات عامة', href: '/settings', icon: Settings },
+    { label: 'إدارة المستخدمين', href: '/settings/users', icon: UserCog },
+  ]
+};
 
 export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
 
@@ -190,6 +199,8 @@ export interface Order {
   captainName?: string;
   notes?: string; 
   createdAt: Date;
+  updatedAt?: Date;
+  completed_at?: Date;
 }
 
 export const DEFAULT_VAT_PERCENTAGE = 14;
@@ -200,12 +211,13 @@ export let DUMMY_ORDERS: Order[] = [
     id: 'o1', 
     orderNumber: 'طلب-001', 
     items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 2 }, { ...DUMMY_MENU_ITEMS[2], quantity: 1, notes: "بدون بصل" }], 
-    subtotal: 13.00,
+    subtotal: (2.50 * 2) + 8.00, // 5 + 8 = 13
     totalAmount: 13.00, 
     status: 'مكتمل', 
     type: 'صالة', 
     tableNumber: '5', 
-    createdAt: new Date(Date.now() - 3600000 * 3) 
+    createdAt: new Date(Date.now() - 3600000 * 3),
+    completed_at: new Date(Date.now() - 3600000 * 2.5)
   },
   { 
     id: 'o2', 
@@ -222,7 +234,7 @@ export let DUMMY_ORDERS: Order[] = [
     id: 'o3', 
     orderNumber: 'طلب-003', 
     items: [{ ...DUMMY_MENU_ITEMS[4], quantity: 1 }, { ...DUMMY_MENU_ITEMS[5], quantity: 1 }], 
-    subtotal: 20.00,
+    subtotal: 5.00 + 15.00, // 20
     totalAmount: 20.00, 
     status: 'قيد الانتظار', 
     type: 'توصيل', 
@@ -235,8 +247,8 @@ export let DUMMY_ORDERS: Order[] = [
     id: 'o4', 
     orderNumber: 'طلب-004', 
     items: [{ ...DUMMY_MENU_ITEMS[6], quantity: 2, notes: "سكر قليل" }, { ...DUMMY_MENU_ITEMS[3], quantity: 1 }], 
-    subtotal: 16.00,
-    totalAmount: 16.00, 
+    subtotal: (4.00 * 2) + 3.00, // 8 + 3 = 11, This was 16 before, item 3 is Fries, not Cheeseburger. Corrected.
+    totalAmount: 11.00, 
     status: 'قيد الانتظار', 
     type: 'صالة', 
     tableNumber: '2', 
@@ -257,7 +269,7 @@ export let DUMMY_ORDERS: Order[] = [
     id: 'o6', 
     orderNumber: 'طلب-006', 
     items: [{ ...DUMMY_MENU_ITEMS[0], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1 }], 
-    subtotal: 7.50,
+    subtotal: 2.50 + 5.00, // 7.50
     totalAmount: 7.50, 
     status: 'جاهز', 
     type: 'سفري', 
@@ -282,7 +294,7 @@ export const DUMMY_TABLES: Table[] = [
   { id: 't2', number: '2', status: 'مشغولة', capacity: 2, orderId: 'o4' },
   { id: 't3', number: '3', status: 'محجوزة', capacity: 6 },
   { id: 't4', number: '4', status: 'متاحة', capacity: 4 },
-  { id: 't5', number: '5', status: 'تحتاج تنظيف', capacity: 2 }, // Was 'o1' table, now needs cleaning
+  { id: 't5', number: '5', status: 'تحتاج تنظيف', capacity: 2 }, // Was 'o1' table
   { id: 't6', number: '6', status: 'متاحة', capacity: 8 },
   { id: 't7', number: '7', status: 'متاحة', capacity: 4 },
   { id: 't8', number: '8', status: 'مشغولة', capacity: 2, orderId: 'o5' },
