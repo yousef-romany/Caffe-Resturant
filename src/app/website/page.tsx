@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import NextImage from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Utensils, Coffee, Cake } from 'lucide-react';
+import { Utensils, Coffee, Cake, ScanLine, UserPlus } from 'lucide-react';
 
 export default function WebsiteLandingPage() {
   const featuredItems = [
@@ -18,6 +18,9 @@ export default function WebsiteLandingPage() {
       <section className="relative py-20 md:py-32 bg-gradient-to-br from-primary/10 via-background to-background text-center">
         <div className="absolute inset-0 bg-background/30 backdrop-blur-sm"></div>
         <div className="container relative z-10 mx-auto px-4">
+          <div className="flex justify-center mb-6">
+            <Coffee className="h-16 w-16 text-primary" />
+          </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl md:text-6xl">
             أشهى المأكولات والمشروبات، اطلبها <span className="text-primary">الآن</span>!
           </h1>
@@ -26,17 +29,26 @@ export default function WebsiteLandingPage() {
           </p>
           <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
             <Button asChild size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform hover:scale-105">
-              <Link href="/website/order">اطلب الآن</Link>
+              <Link href="/website/scan-table">
+                <ScanLine className="me-2 h-5 w-5" />
+                امسح QR الطاولة للطلب
+              </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="shadow-lg transition-transform hover:scale-105">
-              <Link href="/website/menu">تصفح القائمة</Link>
+              <Link href="/website/auth/register">
+                <UserPlus className="me-2 h-5 w-5" />
+                إنشاء حساب جديد
+              </Link>
             </Button>
           </div>
+           <p className="mt-6 text-muted-foreground">
+            لديك حساب بالفعل؟ <Link href="/website/auth/login" className="text-primary hover:underline">سجل الدخول</Link>
+          </p>
         </div>
       </section>
 
       {/* Featured Items Section */}
-      <section className="py-16 bg-secondary/30">
+      <section className="py-16 bg-secondary/5">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center text-foreground mb-12">
             أطباقنا المميزة
@@ -76,12 +88,11 @@ export default function WebsiteLandingPage() {
           <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
             نحن في كافيه بوس إكسبريس نسعى لتقديم أفضل تجربة طعام ومشروبات لعملائنا. جودة عالية، خدمة ممتازة، وأجواء مريحة.
           </p>
-          <Button asChild size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform hover:scale-105">
-            <Link href="/website/contact">تواصل معنا أو قم بزيارتنا</Link>
+          <Button asChild size="lg" variant="secondary" className="shadow-lg transition-transform hover:scale-105">
+            <Link href="/website/contact">تواصل معنا أو قم بزيارتنا (قريباً)</Link>
           </Button>
         </div>
       </section>
     </>
   );
 }
-
