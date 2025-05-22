@@ -14,6 +14,7 @@ import { DUMMY_SUPPLIERS, DUMMY_PURCHASE_ORDERS, type Supplier, type PurchaseOrd
 import { Users, ListChecks, CalendarDays, Filter, DollarSign } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { Label } from '@/components/ui/label'; // Added missing import
 
 const getStatusBadgeVariant = (status: PurchaseOrderStatus) => {
   switch (status) {
