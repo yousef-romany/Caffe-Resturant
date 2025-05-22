@@ -7,13 +7,15 @@ import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { DUMMY_CUSTOMERS, DUMMY_ORDERS, type Customer, type Order, type OrderStatus } from '@/constants';
 import { User, ShoppingBag, CalendarDays, Filter, DollarSign } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { Label } from '@/components/ui/label';
+
 
 const getStatusBadgeVariant = (status: OrderStatus) => {
   switch (status) {
@@ -48,7 +50,7 @@ export default function CustomerDetailPage() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setOrders(customerOrders);
     } else {
-      //notFound(); // This would throw an error, for a static site, maybe redirect or show message
+      // notFound(); // This would throw an error, for a static site, maybe redirect or show message
     }
   }, [customerId]);
 
