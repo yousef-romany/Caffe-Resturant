@@ -37,11 +37,18 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
 
-  const renderNavItems = (items: NavItem[], isSubMenu = false) => {
+  const renderNavItems = (items: NavItem[], isSubMenu = false, parentHref?: string) => {
     return items.map((item) => {
       if (item.children && item.children.length > 0) {
-        const isChildActive = item.children?.some(child => pathname.startsWith(child.href)) ?? false;
-        const isActiveGroup = (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)) || isChildActive;
+        // For an accordion group to be active, either its main href matches, 
+        // or one of its children's href matches the current pathname.
+        // Or, if a parentHref is provided (meaning this is a child accordion),
+        // and the pathname starts with that parentHref.
+        const isChildActive = item.children?.some(child => pathname.startsWith(child.href));
+        const isActiveGroup = 
+          (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)) || 
+          isChildActive ||
+          (parentHref && pathname.startsWith(parentHref) && item.children?.some(child => pathname.startsWith(child.href)));
         
         return (
           <AccordionItem
@@ -65,7 +72,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </div>
             </AccordionTrigger>
             <AccordionContent className="pt-1 ps-3">
-              <SidebarMenu>{renderNavItems(item.children, true)}</SidebarMenu>
+              {/* Pass item.href as parentHref for nested accordions */}
+              <SidebarMenu>{renderNavItems(item.children, true, item.href)}</SidebarMenu>
             </AccordionContent>
           </AccordionItem>
         );
@@ -98,36 +106,42 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <SidebarSeparator />
         <SidebarFooter className="p-2">
           <SidebarMenu>
-            <SidebarMenuItem>
-              <NavLink
-                href={SETTINGS_NAV_ITEM.href}
-                icon={SETTINGS_NAV_ITEM.icon}
-                label={SETTINGS_NAV_ITEM.label}
-              />
-            </SidebarMenuItem>
-             {SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0 && (
-              <Accordion type="multiple" className="w-full">
-                <AccordionItem value={SETTINGS_NAV_ITEM.label} className="border-b-0">
-                   <AccordionTrigger 
-                     className={cn(
+             {/* Settings Nav Item - Special Handling for potential accordion */}
+            {SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0 ? (
+              <Accordion type="single" collapsible className="w-full">
+                 <AccordionItem
+                    value={SETTINGS_NAV_ITEM.label}
+                    key={SETTINGS_NAV_ITEM.label}
+                    className="border-b-0"
+                  >
+                    <AccordionTrigger
+                      className={cn(
                         "flex w-full items-center rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:no-underline",
-                        (SETTINGS_NAV_ITEM.children?.some(child => pathname.startsWith(child.href)) ?? false) &&
-                        "bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
-                     )}
-                     dir="rtl"
-                   >
-                    <div className="flex w-full items-center justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+                        (pathname.startsWith(SETTINGS_NAV_ITEM.href) || SETTINGS_NAV_ITEM.children?.some(child => pathname.startsWith(child.href))) &&
+                          "bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+                      )}
+                      dir="rtl"
+                    >
+                      <div className="flex w-full items-center justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
                         <SETTINGS_NAV_ITEM.icon className="h-5 w-5" />
-                        <span className="!w-fit group-data-[collapsible=icon]:hidden">{SETTINGS_NAV_ITEM.label}</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-1 ps-3">
-                    <SidebarMenu>
-                      {renderNavItems(SETTINGS_NAV_ITEM.children, true)}
-                    </SidebarMenu>
-                  </AccordionContent>
-                </AccordionItem>
+                        <span className="!w-fit group-data-[collapsible=icon]:hidden">
+                          {SETTINGS_NAV_ITEM.label}
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-1 ps-3">
+                      <SidebarMenu>{renderNavItems(SETTINGS_NAV_ITEM.children, true, SETTINGS_NAV_ITEM.href)}</SidebarMenu>
+                    </AccordionContent>
+                  </AccordionItem>
               </Accordion>
+            ) : (
+               <SidebarMenuItem>
+                  <NavLink
+                    href={SETTINGS_NAV_ITEM.href}
+                    icon={SETTINGS_NAV_ITEM.icon}
+                    label={SETTINGS_NAV_ITEM.label}
+                  />
+              </SidebarMenuItem>
             )}
           </SidebarMenu>
         </SidebarFooter>

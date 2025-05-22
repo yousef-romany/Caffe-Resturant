@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock, Coffee as CoffeeIcon, Cake, Beer, Soup, Sandwich, GlassWater } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock, Coffee as CoffeeIcon, Cake, Beer, Soup, Sandwich, GlassWater, QrCode } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -41,7 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   {
     label: 'شاشة المطبخ',
-    href: `/kitchen/${Object.values(CATEGORY_SLUG_MAP)[0].slug}`, // Default to first category
+    href: `/kitchen/${Object.values(CATEGORY_SLUG_MAP)[0]?.slug || 'food'}`, // Default to first category or 'food'
     icon: ChefHat,
     children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
       label: catMap.name,
@@ -62,7 +62,15 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: 'الموظفين', href: '/employees', icon: UsersRound },
-  { label: 'سجل الحضور', href: '/attendance', icon: CalendarClock },
+  { 
+    label: 'سجل الحضور', 
+    href: '/attendance', 
+    icon: CalendarClock,
+    children: [
+      { label: 'عرض السجل', href: '/attendance', icon: ListOrdered },
+      { label: 'مسح QR للحضور', href: '/employee-qr-attendance', icon: QrCode },
+    ]
+  },
   { label: 'العملاء', href: '/customers', icon: Award },
   { label: 'التقييمات', href: '/reviews', icon: MessageSquare },
   { label: 'سجل الطلبات', href: '/orders', icon: ListOrdered },
