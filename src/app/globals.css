@@ -150,7 +150,7 @@ body {
   }
 
 
-  /* Styles for the QR code area itself */
+  /* Styles for the QR code area itself (for employee attendance QR page) */
   .printable-qr-area {
     display: flex;
     flex-direction: row; /* Arrange QR codes side-by-side for printing */
@@ -194,6 +194,69 @@ body {
     padding: 0 !important;
     margin: 0 !important;
   }
+
+  /* Styles specific to printing a single table QR code from its dialog */
+  .table-qr-dialog-printable-area-print-mode {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100vh !important; /* Take full viewport height for printing */
+    padding: 20px !important;
+    box-sizing: border-box !important;
+  }
+
+  .table-qr-dialog-printable-area-print-mode .qr-title {
+    font-size: 28px !important; /* Larger title for single QR print */
+    font-weight: bold !important;
+    margin-bottom: 20px !important;
+    color: black !important;
+  }
+
+  .table-qr-dialog-printable-area-print-mode .qr-code-img {
+    width: 300px !important; /* Larger QR code image */
+    height: 300px !important;
+    border: 2px solid black !important;
+    margin-bottom: 10px !important;
+  }
+
+  .table-qr-dialog-printable-area-print-mode .qr-data-text {
+    font-size: 12px !important;
+    color: #555 !important;
+    max-width: 300px;
+    word-break: break-all;
+  }
+
+  /* Ensure only the printable dialog content is visible when printing from dialog */
+  body.printing-table-qr .table-qr-dialog-printable-area {
+      visibility: visible !important;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 9999; /* Ensure it's on top */
+      background-color: white !important;
+      padding: 20px;
+      text-align: center;
+  }
+   body.printing-table-qr > *:not(.table-qr-dialog-printable-area) {
+      display: none !important;
+   }
+   body.printing-table-qr [cmdk-dialog-content] {
+      all: unset !important; /* Reset styles from shadcn dialog */
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 100% !important;
+      height: auto !important; /* Adjust height to content for print */
+   }
+   body.printing-table-qr [cmdk-dialog-content] > *:not(.qr-title):not(.qr-code-img):not(.qr-data-text):not(.flex.flex-col.items-center.justify-center) {
+      display: none !important; /* Hide dialog header/footer, but keep the QR main div */
+   }
+
 }
 
 ol {
