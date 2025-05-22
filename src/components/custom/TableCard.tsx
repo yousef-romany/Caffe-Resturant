@@ -5,7 +5,7 @@ import type { Table, TableStatus } from '@/constants';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, CircleCheck, CircleX, Trash2, Ban, Check, Edit3, Beer, Sparkles, DollarSign, Eye } from 'lucide-react'; // Replaced Table with Beer (example), Sparkles for cleaning
+import { Users, CircleCheck, CircleX, Trash2, Ban, Check, Edit3, Beer, Sparkles, DollarSign, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface TableCardProps {
@@ -18,24 +18,25 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
 
   const getStatusBadgeVariant = (status: TableStatus) => {
     switch (status) {
-      case 'متاحة': return 'default'; // Greenish in default theme
-      case 'مشغولة': return 'destructive'; // Reddish
-      case 'محجوزة': return 'secondary'; // Bluish/Grayish
-      case 'تحتاج تنظيف': return 'outline'; // Yellowish/Orange if theme supports, else neutral
+      case 'متاحة': return 'default';
+      case 'مشغولة': return 'destructive';
+      case 'محجوزة': return 'secondary';
+      case 'تحتاج تنظيف': return 'outline';
       default: return 'outline';
     }
   };
 
   const handleOccupyTable = () => {
+    // This function is now more streamlined as the POS navigation is handled by onStatusChange
     onStatusChange(table.id, 'مشغولة', 'create_order');
   };
   
   const handleReserveTable = () => {
-    // In a real app, this would open a dialog for reservation details
     onStatusChange(table.id, 'محجوزة');
   };
 
   const handleConfirmReservation = () => {
+    // This should also navigate to POS after setting localStorage
     onStatusChange(table.id, 'مشغولة', 'create_order');
   };
 
@@ -44,15 +45,15 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
   
   const handleViewOrder = () => {
-    if (table.orderId) {
-      // Find the order from DUMMY_ORDERS to pass to POS or specific order view page
-      // For now, just log or route to a generic orders page
-      router.push(`/pos?table=${table.number}&orderId=${table.orderId}`);
+    if (table.orderId && table.number) {
+      localStorage.setItem('pos_target_table_number', table.number);
+      localStorage.setItem('pos_target_order_id', table.orderId);
+      localStorage.setItem('pos_action', 'edit_order');
+      router.push('/pos');
     }
   };
 
   const handleFinishAndPay = () => {
-    // Simulate payment, then change status
     onStatusChange(table.id, 'تحتاج تنظيف');
   };
 
@@ -76,12 +77,11 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
-        {/* Placeholder for additional info like current order summary if occupied */}
         {table.status === 'مشغولة' && table.orderId && (
           <p className="text-xs text-muted-foreground">طلب نشط: {table.orderId}</p>
         )}
          {table.status === 'محجوزة' && (
-          <p className="text-xs text-blue-600">محجوزة لـ (اسم الحجز)</p> // Placeholder
+          <p className="text-xs text-blue-600">محجوزة لـ (اسم الحجز)</p> 
         )}
       </CardContent>
       <CardFooter className="pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">

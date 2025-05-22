@@ -35,7 +35,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // Removed useSearchParams
 import { Badge } from '@/components/ui/badge'; 
 
 const invoiceLabels = {
@@ -158,19 +158,19 @@ export default function POSPage() {
 
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const pathname = usePathname();
 
   const currentLabels = invoiceLabels[invoiceLanguage];
 
   const availableTables = useMemo(() => {
-    const tableNumFromQuery = searchParams.get('table');
-    if (tableNumFromQuery && !currentOrderId) { 
-      const currentTable = DUMMY_TABLES.find(t => t.number === tableNumFromQuery);
-      return currentTable ? [currentTable] : [];
+    // If an order is being edited for a specific table, only that table is "available" for this context
+    if (currentOrderId && orderType === 'صالة' && tableNumber) {
+        const currentTable = DUMMY_TABLES.find(t => t.number === tableNumber);
+        return currentTable ? [currentTable] : [];
     }
+    // For new orders, show genuinely available tables or the one selected from localStorage
     return DUMMY_TABLES.filter(table => table.status === 'متاحة' || table.number === tableNumber); 
-  }, [searchParams, currentOrderId, tableNumber]); 
+  }, [currentOrderId, orderType, tableNumber]); 
 
   const resetPOSSession = useCallback((navigateToTables: boolean = false) => {
     setCurrentOrder([]);
@@ -187,21 +187,31 @@ export default function POSPage() {
     setIsVatEnabled(false);
     setInvoiceLanguage('ar');
 
+    localStorage.removeItem('pos_target_table_number');
+    localStorage.removeItem('pos_target_order_id');
+    localStorage.removeItem('pos_action');
+
     if (navigateToTables) {
       router.push('/tables');
-    } else {
-      router.replace(pathname, undefined); 
     }
-  }, [router, pathname]);
+    // No longer need to router.replace(pathname) as URL is clean
+  }, [router]);
 
 
   useEffect(() => {
-    const tableNumFromQuery = searchParams.get('table');
-    const orderIdFromQuery = searchParams.get('orderId');
+    const tableNumFromStorage = localStorage.getItem('pos_target_table_number');
+    const orderIdFromStorage = localStorage.getItem('pos_target_order_id');
+    // const actionFromStorage = localStorage.getItem('pos_action'); // We can infer action based on orderId presence
 
-    if (orderIdFromQuery) { // Editing an existing order
-        setCurrentOrderId(orderIdFromQuery);
-        const existingOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromQuery);
+    // CRITICAL: Clear localStorage immediately after reading
+    localStorage.removeItem('pos_target_table_number');
+    localStorage.removeItem('pos_target_order_id');
+    localStorage.removeItem('pos_action');
+
+
+    if (orderIdFromStorage) { // Editing an existing order
+        setCurrentOrderId(orderIdFromStorage);
+        const existingOrder = DUMMY_ORDERS.find(o => o.id === orderIdFromStorage);
         if (existingOrder) {
           setCurrentOrder(existingOrder.items);
           setOrderType(existingOrder.type);
@@ -213,12 +223,12 @@ export default function POSPage() {
           setDiscountPercentage(existingOrder.discountPercentage || 0);
           setIsVatEnabled(!!existingOrder.vatPercentage && existingOrder.vatPercentage > 0);
         } else {
-           console.warn(`Order with ID ${orderIdFromQuery} not found.`);
+           toast({ title: "خطأ في الطلب", description: `لم يتم العثور على الطلب ${orderIdFromStorage}. بدء طلب جديد.`, variant: "destructive" });
            resetPOSSession(false); 
         }
-    } else if (tableNumFromQuery) { // New order for a specific table
+    } else if (tableNumFromStorage) { // New order for a specific table
       setOrderType('صالة');
-      setTableNumber(tableNumFromQuery);
+      setTableNumber(tableNumFromStorage);
       setCurrentOrderId(null); 
       setCurrentOrder([]); 
       setGeneralOrderNotes('');
@@ -227,10 +237,26 @@ export default function POSPage() {
       setIsDiscountEnabled(false);
       setDiscountPercentage(0);
       setIsVatEnabled(false);
-    } else { // New general order (not tied to a specific table from URL or existing order)
-      resetPOSSession(false);
+    } else { 
+      // No specific table or order from localStorage: general new order or direct navigation to /pos
+      // If there's existing state (e.g., user was building an order and refreshed), keep it.
+      // Only reset if it's a truly blank/uninitialized state, or if explicitly cleared.
+      // The component's initial state is already for a new general order.
+      // If currentOrder, currentOrderId, or orderType are already set, it means user might be in midst of something.
+      // This `else` block should only run if the POS is *meant* to be fresh, or if something went wrong.
+      // For now, we assume initial state is correctly "new general order".
+      // If there's a need to forcefully clear a stale general order on direct /pos navigation, that's a different logic.
+      if (currentOrder.length > 0 || currentOrderId || orderType ) {
+        // This condition means there was some state, but no localStorage guidance.
+        // This could happen on a page refresh if the user was building a general order.
+        // If this specific condition is problematic, we might need a flag to differentiate
+        // a deliberate general new order from a stale state.
+        // For now, let's assume a refresh should maintain current state.
+        // If we wanted to *always* clear on direct /pos nav with no localStorage, then resetPOSSession(false) would be here.
+      }
     }
-  }, [searchParams, resetPOSSession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetPOSSession]); // Only run once on mount, resetPOSSession handles further resets
 
 
   const filteredItems = useMemo(() => {
@@ -280,7 +306,6 @@ export default function POSPage() {
   const handleSaveItemNotes = () => {
     if (editingItemNotes) {
       setCurrentOrder(currentOrder.map(item => {
-        // Match by the item's unique key in the list if available, or by reference
         if (item.id === editingItemNotes.id && item.notes === editingItemNotes.notes && item.quantity === editingItemNotes.quantity) { 
           return { ...item, notes: itemNotesInput };
         }
@@ -431,7 +456,7 @@ export default function POSPage() {
   };
   
   const handleOrderTypeChange = (value: OrderType | '') => {
-    if (currentOrderId) return; 
+    if (currentOrderId && orderType === 'صالة' && tableNumber) return;  // Prevent changing type/table for existing table orders
     setOrderType(value);
     if (value !== 'صالة') {
       setTableNumber(''); 
@@ -453,13 +478,34 @@ export default function POSPage() {
     setIsClient(true);
   }, []);
 
+  const getPageTitle = () => {
+    if (currentOrderId && orderType === 'صالة' && tableNumber) {
+      return currentLabels.posTitleTable(tableNumber);
+    }
+    // Check if we loaded a table for a new order (tableNumber is set, but no currentOrderId initially)
+    if (!currentOrderId && orderType === 'صالة' && tableNumber) {
+      return currentLabels.posTitleTable(tableNumber);
+    }
+    return currentLabels.posTitleGeneral;
+  };
+
+  const getPageDescription = () => {
+    if (currentOrderId && orderType ==='صالة' && tableNumber) {
+      return currentLabels.posDescTable(tableNumber);
+    }
+    if (!currentOrderId && orderType === 'صالة' && tableNumber) {
+      return currentLabels.posDescTable(tableNumber);
+    }
+    return currentLabels.posDescGeneral;
+  };
+
 
   return (
     <>
       <PageHeader 
-        title={currentOrderId && orderType ==='صالة' && tableNumber ? currentLabels.posTitleTable(tableNumber) : (searchParams.get('table') && !currentOrderId ? currentLabels.posTitleTable(searchParams.get('table')!) : currentLabels.posTitleGeneral)}
-        description={currentOrderId && orderType ==='صالة' && tableNumber ? currentLabels.posDescTable(tableNumber) : (searchParams.get('table') && !currentOrderId ? currentLabels.posDescTable(searchParams.get('table')!) : currentLabels.posDescGeneral)}
-        icon={(currentOrderId && orderType ==='صالة' && tableNumber) || (searchParams.get('table') && !currentOrderId) ? TableIcon : ShoppingCart}
+        title={getPageTitle()}
+        description={getPageDescription()}
+        icon={(currentOrderId && orderType ==='صالة' && tableNumber) || (!currentOrderId && orderType === 'صالة' && tableNumber) ? TableIcon : ShoppingCart}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
         {/* Menu Items Section */}
@@ -586,9 +632,9 @@ export default function POSPage() {
                  <Select 
                     value={orderType} 
                     onValueChange={(value) => handleOrderTypeChange(value as OrderType | '')}
-                    disabled={!!currentOrderId && orderType === 'صالة'}
+                    disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)} // Disable if editing an existing table order
                   >
-                    <SelectTrigger id="orderTypeSelect" disabled={!!currentOrderId && orderType === 'صالة'}>
+                    <SelectTrigger id="orderTypeSelect" disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)}>
                         <SelectValue placeholder="اختر نوع الطلب" />
                     </SelectTrigger>
                     <SelectContent>
@@ -602,15 +648,15 @@ export default function POSPage() {
               {orderType === 'صالة' && (
                 <div>
                   <Label htmlFor="tableNumber">رقم الطاولة</Label>
-                  {(searchParams.get('table') || (currentOrderId && orderType === 'صالة')) ? ( 
+                  {(currentOrderId && orderType === 'صالة' && tableNumber) || (!currentOrderId && tableNumber && orderType === 'صالة') ? ( 
                      <Input id="tableNumberInput" value={tableNumber} className="mt-1" disabled />
                   ) : (
                     <Select 
                         value={tableNumber} 
                         onValueChange={setTableNumber}
-                        disabled={!!currentOrderId && orderType === 'صالة'}
+                        disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)} // Disable if editing existing table order
                     >
-                      <SelectTrigger id="tableNumberSelect" className="mt-1" disabled={!!currentOrderId && orderType === 'صالة'}>
+                      <SelectTrigger id="tableNumberSelect" className="mt-1" disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)}>
                         <SelectValue placeholder={availableTables.length > 0 ? "اختر طاولة" : "لا توجد طاولات متاحة"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -707,7 +753,7 @@ export default function POSPage() {
                 <Button 
                     onClick={handlePlaceOrder} 
                     className="bg-primary hover:bg-primary/90 text-primary-foreground" 
-                    disabled={currentOrder.length === 0 || (orderType === 'صالة' && !tableNumber && !searchParams.get('table') && (!currentOrderId && availableTables.length === 0) )}
+                    disabled={currentOrder.length === 0 || (orderType === 'صالة' && !tableNumber && (!currentOrderId && availableTables.length === 0) )}
                 >
                   {currentOrderId ? 'تحديث الطلب' : 'إرسال الطلب'}
                 </Button>

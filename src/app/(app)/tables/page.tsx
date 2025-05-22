@@ -7,7 +7,7 @@ import { TableCard } from '@/components/custom/TableCard';
 import { DUMMY_TABLES, DUMMY_ORDERS, type Table, type TableStatus } from '@/constants';
 import { useToast } from '@/hooks/use-toast';
 import { Table2 as TableIcon, Filter } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Removed useSearchParams as it's no longer directly used here for this flow
 import {
   Select,
   SelectContent,
@@ -25,7 +25,6 @@ export default function TablesPage() {
   const [isClient, setIsClient] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     setIsClient(true);
@@ -33,43 +32,28 @@ export default function TablesPage() {
     setTables(JSON.parse(JSON.stringify(DUMMY_TABLES)));
   }, []);
   
-  useEffect(() => {
-    // This effect handles creating a new order if redirected from POS with newOrderForTable
-    const newOrderForTable = searchParams.get('newOrderForTable');
-    const orderId = searchParams.get('orderId');
-
-    if (newOrderForTable && orderId) {
-       setTables(prevTables =>
-        prevTables.map(t =>
-          t.number === newOrderForTable ? { ...t, status: 'مشغولة', orderId: orderId } : t
-        )
-      );
-      // Optionally, clear these search params from the URL
-      // router.replace('/tables', undefined); // Next 13 way to clear search params
-    }
-  }, [searchParams, router]);
-
 
   const handleTableStatusChange = (tableId: string, newStatus: TableStatus, associatedAction?: 'create_order') => {
     let updatedOrderId: string | undefined = undefined;
+    let targetTableNumber: string | undefined = undefined;
 
     setTables(prevTables =>
       prevTables.map(table => {
         if (table.id === tableId) {
+          targetTableNumber = table.number; // Capture table number for navigation
           const updatedTable = { ...table, status: newStatus };
           if (newStatus === 'مشغولة' && associatedAction === 'create_order') {
-            // Simulate creating a new order ID if one doesn't exist (e.g. from available or confirmed reservation)
-            updatedOrderId = table.orderId || `order-${Date.now()}`; // Keep existing if present, or create new
+            updatedOrderId = table.orderId || `order-${Date.now()}`; 
             updatedTable.orderId = updatedOrderId;
             
-            // Create a dummy order if it's a new occupation
             if (!table.orderId) {
                 const newOrder = {
                   id: updatedOrderId,
                   orderNumber: `طلب-${Date.now().toString().slice(-5)}`,
                   items: [],
+                  subtotal: 0,
                   totalAmount: 0,
-                  status: 'قيد الانتظار' as const, // Or 'قيد التجهيز' if items are added immediately
+                  status: 'قيد الانتظار' as const,
                   type: 'صالة' as const,
                   tableNumber: table.number,
                   createdAt: new Date(),
@@ -78,7 +62,7 @@ export default function TablesPage() {
             }
 
           } else if (newStatus === 'متاحة' || newStatus === 'تحتاج تنظيف') {
-            updatedTable.orderId = undefined; // Clear orderId when table becomes available or needs cleaning
+            updatedTable.orderId = undefined; 
           }
           return updatedTable;
         }
@@ -92,9 +76,11 @@ export default function TablesPage() {
       description: `تم تغيير حالة الطاولة ${table?.number} إلى ${newStatus}.`,
     });
 
-    if (newStatus === 'مشغولة' && associatedAction === 'create_order' && table) {
-        // Navigate to POS to start/continue order for this table
-        router.push(`/pos?table=${table.number}&orderId=${updatedOrderId}`);
+    if (newStatus === 'مشغولة' && associatedAction === 'create_order' && targetTableNumber && updatedOrderId) {
+        localStorage.setItem('pos_target_table_number', targetTableNumber);
+        localStorage.setItem('pos_target_order_id', updatedOrderId);
+        localStorage.setItem('pos_action', 'edit_order'); // Or 'new_order_for_table' if always starting fresh POS for it
+        router.push('/pos');
     }
   };
   
