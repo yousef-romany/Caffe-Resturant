@@ -23,28 +23,33 @@ interface KitchenOrderCardProps {
   order: Order;
   onStartPreparing: (orderId: string) => void;
   onMarkAsReady: (orderId: string) => void;
-  displayCategory: Category; // Category for this specific kitchen view
+  displayCategory: Category; 
   isLate: boolean;
 }
 
 function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCategory, isLate }: KitchenOrderCardProps) {
   const [timeAgo, setTimeAgo] = useState('');
+  const [timeInCurrentStatus, setTimeInCurrentStatus] = useState('');
 
   useEffect(() => {
-    const updateTimer = () => {
+    const updateTimers = () => {
       setTimeAgo(formatDistanceToNow(new Date(order.createdAt), { addSuffix: true, locale: arSA }));
-    };
-    updateTimer();
-    const intervalId = setInterval(updateTimer, 60000); // Update every minute
-    return () => clearInterval(intervalId);
-  }, [order.createdAt]);
 
-  // Filter items for this specific category being displayed on the card
+      let statusTime = order.createdAt;
+      if (order.status === 'قيد التجهيز' && order.kitchen_started_at) {
+        statusTime = order.kitchen_started_at;
+      }
+      setTimeInCurrentStatus(formatDistanceToNow(new Date(statusTime), { locale: arSA, addSuffix: false }));
+    };
+    
+    updateTimers();
+    const intervalId = setInterval(updateTimers, 60000); 
+    return () => clearInterval(intervalId);
+  }, [order.createdAt, order.status, order.kitchen_started_at]);
+
   const itemsToDisplay = order.items.filter(item => item.category === displayCategory);
 
   if (itemsToDisplay.length === 0) {
-    // This specific order might not have items for *this* category, so don't render the card for this category view.
-    // This check should ideally happen before rendering the card itself.
     return null;
   }
 
@@ -61,6 +66,18 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
         <CardDescription>
           {order.type}
           {order.type === 'صالة' && order.tableNumber && ` - طاولة: ${order.tableNumber}`}
+          {order.status === 'قيد الانتظار' && (
+            <span className="block text-xs text-yellow-600 mt-1">
+              <Clock className="h-3 w-3 inline me-1" />
+              في الانتظار منذ: {timeInCurrentStatus}
+            </span>
+          )}
+          {order.status === 'قيد التجهيز' && (
+            <span className="block text-xs text-blue-600 mt-1">
+              <CookingPot className="h-3 w-3 inline me-1" />
+              تحت التجهيز منذ: {timeInCurrentStatus}
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <ScrollArea className="flex-grow">
@@ -118,7 +135,6 @@ export default function KitchenCategoryPage({ params }: { params: { categorySlug
   const currentCategoryName = categoryInfo.name;
   const CategoryIcon = categoryInfo.icon || ChefHat;
 
-  // Check if current staff is assigned to this category (simulated)
   const isAuthorizedForCategory = 
     CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length === 0 || 
     CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(currentCategoryName);
@@ -278,3 +294,4 @@ export default function KitchenCategoryPage({ params }: { params: { categorySlug
     </>
   );
 }
+

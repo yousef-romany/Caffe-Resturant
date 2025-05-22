@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from "react";
@@ -39,8 +40,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const renderNavItems = (items: NavItem[], isSubMenu = false) => {
     return items.map((item) => {
       if (item.children && item.children.length > 0) {
-        const isActiveGroup =
-          item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        const isChildActive = item.children?.some(child => pathname.startsWith(child.href)) ?? false;
+        const isActiveGroup = (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)) || isChildActive;
+        
         return (
           <AccordionItem
             value={item.label}
@@ -50,7 +52,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <AccordionTrigger
               className={cn(
                 "flex w-full items-center rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:no-underline",
-                // Removed justify-start and gap-2 from here
                 isActiveGroup &&
                   "bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
               )}
@@ -64,8 +65,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </div>
             </AccordionTrigger>
             <AccordionContent className="pt-1 ps-3">
-              {" "}
-              {/* Indent accordion content */}
               <SidebarMenu>{renderNavItems(item.children, true)}</SidebarMenu>
             </AccordionContent>
           </AccordionItem>
@@ -106,17 +105,39 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 label={SETTINGS_NAV_ITEM.label}
               />
             </SidebarMenuItem>
+             {SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0 && (
+              <Accordion type="multiple" className="w-full">
+                <AccordionItem value={SETTINGS_NAV_ITEM.label} className="border-b-0">
+                   <AccordionTrigger 
+                     className={cn(
+                        "flex w-full items-center rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground hover:no-underline",
+                        (SETTINGS_NAV_ITEM.children?.some(child => pathname.startsWith(child.href)) ?? false) &&
+                        "bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+                     )}
+                     dir="rtl"
+                   >
+                    <div className="flex w-full items-center justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+                        <SETTINGS_NAV_ITEM.icon className="h-5 w-5" />
+                        <span className="!w-fit group-data-[collapsible=icon]:hidden">{SETTINGS_NAV_ITEM.label}</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-1 ps-3">
+                    <SidebarMenu>
+                      {renderNavItems(SETTINGS_NAV_ITEM.children, true)}
+                    </SidebarMenu>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 shadow-sm backdrop-blur-md md:px-6">
-          {/* SidebarTrigger is on the right (start) in RTL */}
           <div className="flex items-center gap-2">
             <SidebarTrigger />
           </div>
           
-          {/* ThemeToggle and UserNav are on the left (end) in RTL */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <UserNav />
