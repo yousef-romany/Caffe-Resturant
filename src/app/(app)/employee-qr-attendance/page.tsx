@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/custom/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { UserCheck, Camera, QrCode, AlertTriangle, Printer, LogIn, LogOut } from 'lucide-react';
+import { UserCheck, Camera, QrCode, AlertTriangle, Printer } from 'lucide-react';
 import { DUMMY_ATTENDANCE_RECORDS, DUMMY_EMPLOYEES, type AttendanceRecord } from '@/constants';
 import { format, differenceInHours, differenceInMinutes, startOfDay, isToday } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -21,11 +21,11 @@ export default function EmployeeQrAttendancePage() {
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   
-  const CURRENT_EMPLOYEE_ID = 'emp3'; 
+  const CURRENT_EMPLOYEE_ID = 'emp3'; // محمد عبدالله
 
   // QR Code generation data
-  const clockInDataString = "employee_attendance_action:clock_in,location:main_entry,timestamp:fixed_for_qr";
-  const clockOutDataString = "employee_attendance_action:clock_out,location:main_exit,timestamp:fixed_for_qr";
+  const clockInDataString = "employee_attendance_action:clock_in,location:main_entry,employee_id_placeholder";
+  const clockOutDataString = "employee_attendance_action:clock_out,location:main_exit,employee_id_placeholder";
 
   const clockInQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(clockInDataString)}`;
   const clockOutQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(clockOutDataString)}`;
@@ -81,11 +81,11 @@ export default function EmployeeQrAttendancePage() {
     if (!data) return;
 
     setScannedData(data);
-    setIsScanning(false);
+    setIsScanning(false); // Stop camera after scan simulation
 
     const currentEmployee = DUMMY_EMPLOYEES.find(emp => emp.id === CURRENT_EMPLOYEE_ID);
     if (!currentEmployee) {
-      toast({ variant: 'destructive', title: 'خطأ', description: 'لم يتم العثور على الموظف الحالي.' });
+      toast({ variant: 'destructive', title: 'خطأ في بيانات الموظف', description: 'لم يتم العثور على الموظف الحالي المحدد في النظام.' });
       return;
     }
     const employeeName = currentEmployee.name;
@@ -103,8 +103,8 @@ export default function EmployeeQrAttendancePage() {
     if (actionType === 'clock_in') {
       if (lastRecordToday && !lastRecordToday.clockOutTime) {
         toast({
-          title: "خطأ",
-          description: `يا ${employeeName}، أنت مسجل حضور بالفعل اليوم ولم تسجل انصرافًا.`,
+          title: "خطأ في تسجيل الحضور",
+          description: `يا ${employeeName}، أنت مسجل حضور بالفعل اليوم (${format(new Date(lastRecordToday.clockInTime), 'p', { locale: arSA })}) ولم تسجل انصرافًا بعد.`,
           variant: "destructive",
         });
         return;
@@ -116,17 +116,17 @@ export default function EmployeeQrAttendancePage() {
         clockInTime: now,
         attendanceDate: startOfDay(now),
       };
-      DUMMY_ATTENDANCE_RECORDS.unshift(newRecord);
+      DUMMY_ATTENDANCE_RECORDS.unshift(newRecord); // Add to the beginning of the dummy array
       toast({
         title: "تم تسجيل الحضور بنجاح",
-        description: `مرحباً بك يا ${employeeName}! وقت الحضور: ${format(now, 'p', { locale: arSA })}`,
+        description: `مرحباً بك يا ${employeeName}! وقت الحضور: ${format(now, 'p', { locale: arSA })}.`,
         className: "bg-green-500 text-white",
       });
 
     } else if (actionType === 'clock_out') {
       if (!lastRecordToday || lastRecordToday.clockOutTime) {
         toast({
-          title: "خطأ",
+          title: "خطأ في تسجيل الانصراف",
           description: `يا ${employeeName}، يجب تسجيل الحضور أولاً اليوم أو أنك سجلت انصرافًا بالفعل.`,
           variant: "destructive",
         });
@@ -137,9 +137,13 @@ export default function EmployeeQrAttendancePage() {
       if (recordIndex !== -1) {
         const recordToUpdate = DUMMY_ATTENDANCE_RECORDS[recordIndex];
         recordToUpdate.clockOutTime = now;
-        const durationHours = differenceInHours(now, new Date(recordToUpdate.clockInTime));
-        const durationMinutes = differenceInMinutes(now, new Date(recordToUpdate.clockInTime)) % 60;
-        recordToUpdate.workDurationHours = parseFloat(`${durationHours}.${String(durationMinutes).padStart(2, '0')}`);
+        
+        const clockInDate = new Date(recordToUpdate.clockInTime);
+        const totalMinutesWorked = differenceInMinutes(now, clockInDate);
+        const hoursWorked = Math.floor(totalMinutesWorked / 60);
+        const minutesWorked = totalMinutesWorked % 60;
+        
+        recordToUpdate.workDurationHours = parseFloat((hoursWorked + (minutesWorked / 60)).toFixed(2));
         
         DUMMY_ATTENDANCE_RECORDS[recordIndex] = recordToUpdate;
         
@@ -153,17 +157,17 @@ export default function EmployeeQrAttendancePage() {
 
         toast({
           title: "تم تسجيل الانصراف بنجاح",
-          description: `إلى اللقاء يا ${employeeName}! وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(new Date(recordToUpdate.clockInTime), now)}.`,
+          description: `إلى اللقاء يا ${employeeName}! وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(clockInDate, now)}.`,
           className: "bg-red-500 text-white",
         });
       } else {
-         toast({ variant: 'destructive', title: 'خطأ', description: 'لم يتم العثور على سجل الحضور النشط.' });
+         toast({ variant: 'destructive', title: 'خطأ', description: 'لم يتم العثور على سجل الحضور النشط للتحديث.' });
       }
     } else {
       toast({
         variant: 'destructive',
         title: 'بيانات QR غير صالحة',
-        description: 'لا يمكن التعرف على الإجراء من رمز QR الممسوح.',
+        description: `لا يمكن التعرف على الإجراء من رمز QR الممسوح (${data}).`,
       });
     }
   };
@@ -175,19 +179,17 @@ export default function EmployeeQrAttendancePage() {
 
   if (hasCameraPermission === false && isScanning) {
     return (
-      <>
-        <div className="hide-on-print">
-          <PageHeader title="مسح QR للحضور والانصراف" description="وجه الكاميرا نحو رمز QR الخاص بالتحضير." icon={UserCheck} />
-          <Alert variant="destructive" className="my-4">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>الوصول إلى الكاميرا مطلوب</AlertTitle>
-            <AlertDescription>
-              يرجى تمكين صلاحيات الكاميرا في إعدادات المتصفح الخاص بك.
-            </AlertDescription>
-          </Alert>
-          <Button onClick={() => setIsScanning(false)} variant="outline">إلغاء المسح</Button>
-        </div>
-      </>
+      <div className="hide-on-print">
+        <PageHeader title="مسح QR للحضور والانصراف" description="وجه الكاميرا نحو رمز QR الخاص بالتحضير." icon={UserCheck} />
+        <Alert variant="destructive" className="my-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>الوصول إلى الكاميرا مطلوب</AlertTitle>
+          <AlertDescription>
+            يرجى تمكين صلاحيات الكاميرا في إعدادات المتصفح الخاص بك.
+          </AlertDescription>
+        </Alert>
+        <Button onClick={() => setIsScanning(false)} variant="outline">إلغاء المسح</Button>
+      </div>
     );
   }
 
@@ -208,6 +210,7 @@ export default function EmployeeQrAttendancePage() {
             <div className="w-full max-w-md p-4 border-2 border-dashed border-primary rounded-lg bg-card shadow-lg">
               <video ref={videoRef} className="w-full aspect-video rounded-md" autoPlay muted playsInline />
               <p className="text-center text-muted-foreground mt-2">جاري البحث عن رمز QR...</p>
+              {/* In a real app, a QR decoding library would use the videoRef and call handleScanSuccess */}
               <Button onClick={() => handleScanSuccess(clockInDataString)} className="w-full mt-4">
                 محاكاة مسح (تسجيل حضور)
               </Button>
@@ -218,14 +221,14 @@ export default function EmployeeQrAttendancePage() {
             </div>
           )}
 
-          {scannedData && (
+          {scannedData && !isScanning && ( // Only show this if scanning is done
             <Alert className="max-w-md">
               <QrCode className="h-4 w-4" />
               <AlertTitle>تم التعامل مع المسح!</AlertTitle>
               <AlertDescription>
-                سيتم عرض رسالة تأكيد بالحالة (حضور/انصراف).
+                العملية التي تم محاكاتها: {scannedData.includes('clock_in') ? 'تسجيل حضور' : 'تسجيل انصراف'}.
                 <br/>
-                البيانات المستلمة من الـQR: <strong>{scannedData}</strong>
+                راجع رسالة التأكيد لمعرفة حالة العملية.
               </AlertDescription>
               <Button onClick={() => { setScannedData(null); setIsScanning(true);}} className="mt-4">مسح رمز آخر</Button>
             </Alert>
@@ -239,6 +242,7 @@ export default function EmployeeQrAttendancePage() {
         <Card className="shadow-lg">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl hide-on-print">رموز QR للحضور والانصراف (للطباعة)</CardTitle>
+            <CardDescription className="hide-on-print">هذه الرموز يمكن طباعتها ووضعها في مكان العمل ليقوم الموظفون بمسحها.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="printable-qr-area">
@@ -265,3 +269,4 @@ export default function EmployeeQrAttendancePage() {
     </>
   );
 }
+
