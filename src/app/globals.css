@@ -117,135 +117,85 @@ body {
   body {
     -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
     print-color-adjust: exact !important; /* Firefox, Edge */
-  }
-  body > *:not(.printable-area) {
-    display: none !important;
-  }
-  .printable-area {
-    display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 20px !important;
-    background-color: white !important;
-    color: black !important;
-  }
-  .printable-area .printable-invoice-content {
-    font-family: 'Arial', sans-serif;
-    color: #000;
-  }
-  .printable-area .printable-invoice-content .dialog-title-print {
-    font-size: 1.5rem; /* 24px */
-    font-weight: bold;
-    text-align: center;
-    margin-bottom: 0.5rem;
-    color: #000;
-  }
-   .printable-area .printable-invoice-content .dialog-description-print {
-    font-size: 0.875rem; /* 14px */
-    text-align: center;
-    margin-bottom: 1rem;
-    color: #333;
-  }
-  .printable-area .printable-invoice-content p {
-    margin-bottom: 0.5rem;
-    line-height: 1.4;
-    color: #000;
-  }
-  .printable-area .printable-invoice-content strong {
-    font-weight: bold;
-    color: #000;
-  }
-  .printable-area .printable-invoice-content ul.invoice-items-list {
-    list-style: none;
-    padding: 0;
-    margin: 1rem 0;
-  }
-  .printable-area .printable-invoice-content li.item-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px dashed #ccc;
-    color: #000;
-  }
-   .printable-area .printable-invoice-content li.item-row:last-child {
-    border-bottom: 1px solid #000; /* Solid line for the last item */
-  }
-  .printable-area .printable-invoice-content .item-details {
-    flex-grow: 1;
-  }
-  .printable-area .printable-invoice-content .item-name-print {
-    font-weight: bold;
-  }
-  .printable-area .printable-invoice-content .item-meta-print {
-    font-size: 0.8rem;
-    color: #444;
-  }
-  .printable-area .printable-invoice-content .item-notes-print {
-    font-size: 0.75rem;
-    font-style: italic;
-    color: #555;
-    margin-inline-start: 1rem; /* RTL aware */
-  }
-  .printable-area .printable-invoice-content .item-total-price {
-    text-align: end; /* RTL aware */
-    font-weight: bold;
-    min-width: 60px; /* Ensure some space for price */
+    background-color: white !important; /* Ensure white background for print */
+    color: black !important; /* Ensure black text for print */
   }
 
-  .printable-area .printable-invoice-content .invoice-summary {
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-    border-top: 2px solid #000;
-  }
-  .printable-area .printable-invoice-content .summary-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 0.25rem;
-    padding: 0.1rem 0;
-  }
-  .printable-area .printable-invoice-content .summary-row.total {
-    font-size: 1.25rem;
-    font-weight: bold;
-    margin-top: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid #000;
-  }
-  .printable-area .printable-invoice-content img {
-    display: none !important; /* Hide images in print by default for cleaner invoice */
-  }
-  .printable-area .no-print {
+  /* Hide elements not meant for printing */
+  .hide-on-print,
+  body > div[data-app-layout-wrapper] > header, /* Main app header */
+  nav[data-sidebar="sidebar"], /* The actual sidebar div */
+  .sidebar-provider > div[data-collapsible] /* Sidebar wrapper for desktop */
+   {
     display: none !important;
   }
-  .printable-area > button[class*="absolute"] { /* Hides the X button */
-     display: none !important;
+
+  /* Ensure the printable section and its direct parent take up space */
+  main > .printable-qr-section,
+  .printable-qr-section {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important; /* Add some padding for the print layout */
+    background-color: white !important;
   }
-  .printable-area .overflow-y-auto { /* Ensure content is not cut off */
-    overflow-y: visible !important;
-    max-height: none !important;
+  
+  /* Ensure main content is visible if it's the printable area */
+   main.flex-1.p-4.md\:p-6 > .printable-qr-section {
+      visibility: visible !important;
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
   }
-  .printable-area .badge-print { /* Basic badge styling for print */
-    display: inline-block;
-    padding: 0.1em 0.4em;
-    font-size: 0.75em;
-    font-weight: 700;
-    line-height: 1;
+
+
+  /* Styles for the QR code area itself */
+  .printable-qr-area {
+    display: flex;
+    flex-direction: row; /* Arrange QR codes side-by-side for printing */
+    justify-content: space-around; /* Space them out on the page */
+    align-items: center;
+    gap: 40px; /* Space between items */
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .qr-code-item {
     text-align: center;
-    white-space: nowrap;
-    vertical-align: baseline;
-    border-radius: 0.25rem;
-    border: 1px solid #000;
-    background-color: #eee !important; /* Important to override screen styles */
-    color: #000 !important;
+    page-break-inside: avoid; /* Try to keep QR code and its title together */
+    flex: 1; /* Allow items to grow and share space */
+    max-width: 45%; /* Limit max width to fit two side-by-side */
+  }
+
+  .qr-code-item h3 {
+    font-size: 1.5rem; /* Adjust title size for print */
+    margin-bottom: 15px;
+    color: black !important;
+  }
+
+  .qr-code-item img,
+  .qr-code-item .next-image-wrapper { /* Target NextImage if it wraps img */
+    width: 200px !important; /* Explicit width for QR code image */
+    height: 200px !important; /* Explicit height for QR code image */
+    border: 1px solid #ccc !important; /* Optional border */
+    margin: 0 auto; /* Center the image */
+  }
+  
+  .qr-code-item p.text-xs { /* Style for the data string below QR */
+    color: #333 !important;
+    font-size: 0.7rem !important;
+    margin-top: 5px !important;
+  }
+  
+  /* Reset any main layout padding/margins for print */
+  body > div[data-app-layout-wrapper] > main {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }
+
 ol {
   height: fit-content !important;
 }

@@ -16,13 +16,18 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      // Add other image hostnames here if needed
-      // {
-      //   protocol: 'https',
-      //   hostname: 'another-image-provider.com',
-      //   port: '',
-      //   pathname: '/**',
-      // }
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.qrserver.com', // Added for QR code generation
+        port: '',
+        pathname: '/v1/create-qr-code/**',
+      },
     ],
   },
 };
