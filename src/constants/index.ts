@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock, Coffee as CoffeeIcon, Cake, Beer, Soup, Sandwich, GlassWater } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -58,6 +58,21 @@ export const SETTINGS_NAV_ITEM: NavItem = {
 };
 
 export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
+export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
+
+// For Kitchen Display System - determines which categories a staff member sees
+// Example: ['حلويات', 'مشروبات'] means staff sees only these two sections.
+// An empty array or undefined means staff sees ALL sections.
+export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = []; // Empty = show all for now
+
+// Map categories to icons for KDS
+export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
+  "مأكولات": Sandwich, // Or Soup, Utensils
+  "مشروبات": GlassWater, // Or CoffeeIcon
+  "حلويات": Cake,
+  "شيشة": Flame, // Placeholder, as there isn't a direct hookah icon in lucide
+};
+
 
 // Inventory Management Types
 export type IngredientUnit = 'جرام' | 'كيلوجرام' | 'مللي لتر' | 'لتر' | 'قطعة';
@@ -172,7 +187,6 @@ export const DUMMY_MENU_ITEMS: MenuItem[] = [
   },
 ];
 
-export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
 
 export type OrderStatus = "قيد الانتظار" | "قيد التجهيز" | "جاهز" | "مكتمل" | "ملغى";
 export type OrderType = "صالة" | "سفري" | "توصيل";
@@ -222,9 +236,9 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o2',
     orderNumber: 'طلب-002',
-    items: [{ ...DUMMY_MENU_ITEMS[1], quantity: 1 }],
-    subtotal: 3.50,
-    totalAmount: 3.50,
+    items: [{ ...DUMMY_MENU_ITEMS[1], quantity: 1 }, { ...DUMMY_MENU_ITEMS[4], quantity: 1, notes: "بدون سكر إضافي"}], // كابتشينو و كيكة
+    subtotal: 3.50 + 5.00,
+    totalAmount: 8.50,
     status: 'قيد التجهيز',
     type: 'سفري',
     customerName: 'أحمد محمود',
@@ -257,9 +271,9 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o5',
     orderNumber: 'طلب-005',
-    items: [{ ...DUMMY_MENU_ITEMS[7], quantity: 1 }],
-    subtotal: 7.50,
-    totalAmount: 7.50,
+    items: [{ ...DUMMY_MENU_ITEMS[7], quantity: 1 }, { ...DUMMY_MENU_ITEMS[0], quantity: 1, notes: "دبل شوت"}], // ساندويتش و اسبريسو
+    subtotal: 7.50 + 2.50,
+    totalAmount: 10.00,
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '8',
@@ -463,9 +477,9 @@ export let DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   {
     id: 'att3',
     employeeId: 'emp3', // محمد عبدالله (Yesterday)
-    clockInTime: new Date(new Date().setDate(new Date().getDate() -1) && new Date().setHours(9, 0, 0, 0)),
-    clockOutTime: new Date(new Date().setDate(new Date().getDate() -1) && new Date().setHours(17, 15, 0, 0)),
-    attendanceDate: new Date(new Date().setDate(new Date().getDate() -1) && new Date().setHours(0,0,0,0)),
+    clockInTime: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(9, 0, 0, 0)),
+    clockOutTime: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(17, 15, 0, 0)),
+    attendanceDate: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(0,0,0,0)),
     workDurationHours: 8.25,
   },
 ];
@@ -484,6 +498,7 @@ export interface SystemUser {
 export interface Role {
   id: string;
   name: string; // e.g., 'Admin', 'Cashier'
+  description?: string;
   permissions: string[]; // Array of permission keys
 }
 
@@ -493,18 +508,17 @@ export interface Permission {
   groupName?: string; // For UI grouping
 }
 
-// Dummy data for these can be extensive and is better managed via a backend.
-// For now, we'll keep them minimal or handle them in the specific User Management page.
-
 export const DUMMY_SYSTEM_USERS: SystemUser[] = [
     { id: 'user1', username: 'admin', employeeId: 'emp1', fullName: 'أحمد خالد (مدير)', roles: ['admin', 'manager'], isActive: true },
     { id: 'user2', username: 'cashier1', employeeId: 'emp3', fullName: 'محمد عبدالله (كاشير)', roles: ['cashier'], isActive: true },
+    { id: 'user3', username: 'chef_sara', employeeId: 'emp2', fullName: 'سارة علي (شيف)', roles: ['chef'], isActive: true },
 ];
 
 export const DUMMY_ROLES: Role[] = [
-    { id: 'admin', name: 'مسؤول النظام', permissions: ['*'] }, // * means all permissions
-    { id: 'manager', name: 'مدير', permissions: ['view_dashboard', 'manage_pos', 'manage_menu', 'manage_employees_view', 'view_reports_sales'] },
-    { id: 'cashier', name: 'كاشير', permissions: ['manage_pos', 'view_orders_history'] },
+    { id: 'admin', name: 'مسؤول النظام', description: 'صلاحيات كاملة على النظام', permissions: ['*'] }, // * means all permissions
+    { id: 'manager', name: 'مدير', description: 'إدارة العمليات والموظفين والتقارير', permissions: ['view_dashboard', 'manage_pos', 'manage_menu', 'manage_employees_view', 'view_reports_sales'] },
+    { id: 'cashier', name: 'كاشير', description: 'معالجة الطلبات والمدفوعات', permissions: ['manage_pos', 'view_orders_history'] },
+    { id: 'chef', name: 'شيف', description: 'إدارة المطبخ وحالة الطلبات', permissions: ['view_kitchen_screen', 'update_order_status_kitchen'] },
 ];
 // Permissions list would be much longer in a real system.
 // For now, the strings in DUMMY_ROLES.permissions are indicative.
