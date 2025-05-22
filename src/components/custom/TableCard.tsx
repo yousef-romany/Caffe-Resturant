@@ -1,15 +1,15 @@
 
 "use client";
 
-import { useState } from 'react'; // Added useState
+import { useState } from 'react';
 import type { Table, TableStatus } from '@/constants';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, CircleCheck, CircleX, Trash2, Ban, Check, Edit3, Beer, Sparkles, DollarSign, Eye, QrCode as QrCodeIcon, Printer } from 'lucide-react'; // Added QrCodeIcon, Printer
+import { Users, CircleCheck, CircleX, Trash2, Ban, Check, Edit3, Beer, Sparkles, DollarSign, Eye, QrCode as QrCodeIcon, Printer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog"; // Added Dialog components
-import NextImage from 'next/image'; // Added NextImage
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import NextImage from 'next/image';
 
 interface TableCardProps {
   table: Table;
@@ -20,8 +20,11 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   const router = useRouter();
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
 
-  const qrCodeData = `action:start_table_order,table_id:${table.id},table_number:${table.number}`;
+  // Generate a relative URL for the QR code.
+  // When printing, ensure the correct domain (e.g., http://localhost:3000 or your production domain) is prepended.
+  const qrCodeData = `/website/menu?table_id=${table.id}&table_number=${table.number}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCodeData)}`;
+
 
   const getStatusBadgeVariant = (status: TableStatus) => {
     switch (status) {
@@ -34,7 +37,11 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleOccupyTable = () => {
-    onStatusChange(table.id, 'مشغولة', 'create_order');
+    // Store table number in localStorage for POS page to pick up
+    localStorage.setItem('pos_target_table_number', table.number);
+    localStorage.removeItem('pos_target_order_id'); // Ensure no old orderId is picked up
+    localStorage.setItem('pos_action', 'new_order_for_table');
+    onStatusChange(table.id, 'مشغولة', 'create_order'); // This will also navigate to /pos via onStatusChange logic in TablesPage
   };
   
   const handleReserveTable = () => {
@@ -42,6 +49,10 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleConfirmReservation = () => {
+    // Store table number and a potential new orderId or indicate new order action for POS
+    localStorage.setItem('pos_target_table_number', table.number);
+    localStorage.removeItem('pos_target_order_id');
+    localStorage.setItem('pos_action', 'new_order_for_table'); // Explicitly set for new order from reservation
     onStatusChange(table.id, 'مشغولة', 'create_order');
   };
 
@@ -59,6 +70,8 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleFinishAndPay = () => {
+    // Logic for payment and then changing status. For now, just change status.
+    // POS page should handle actual payment and potentially clear table orderId before this.
     onStatusChange(table.id, 'تحتاج تنظيف');
   };
 
@@ -67,21 +80,18 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handlePrintTableQr = () => {
-    // This uses a class to target the specific dialog content for printing
-    const printableArea = document.querySelector('.table-qr-dialog-printable-area');
+    const printableArea = document.querySelector(`.table-qr-dialog-printable-area-${table.id}`);
     if (printableArea) {
       const printWindow = window.open('', '_blank');
-      printWindow?.document.write('<html><head><title>Print QR</title>');
-      // It's important to include necessary styles for printing
-      printWindow?.document.write('<link rel="stylesheet" href="/_next/static/css/app/layout.css">'); // Adjust path if needed
-      printWindow?.document.write('<style>body { margin: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; } .qr-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; } .qr-code-img { width: 250px; height: 250px; } .qr-data-text { font-size: 10px; margin-top: 5px; word-break: break-all; } @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } button { display: none !important; } }</style>');
+      printWindow?.document.write('<html><head><title>Print QR - Table ' + table.number + '</title>');
+      printWindow?.document.write('<link rel="stylesheet" href="/_next/static/css/app/layout.css">'); // Adjust if your global CSS path differs
+      printWindow?.document.write('<style>body { margin: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; } .qr-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; } .qr-code-img { width: 250px !important; height: 250px !important; border: 1px solid #ccc; } .qr-data-text { font-size: 10px; margin-top: 5px; word-break: break-all; max-width: 250px; } @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } button, .no-print { display: none !important; } }</style>');
       printWindow?.document.write('</head><body>');
       printWindow?.document.write(printableArea.innerHTML);
       printWindow?.document.write('</body></html>');
       printWindow?.document.close();
       printWindow?.focus();
       printWindow?.print();
-      // printWindow?.close(); // Closing too soon might cancel print dialog in some browsers
     }
   };
 
@@ -156,10 +166,10 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
       </Card>
 
       <Dialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen}>
-        <DialogContent className="sm:max-w-md table-qr-dialog-printable-area">
+        <DialogContent className={`sm:max-w-md table-qr-dialog-printable-area-${table.id}`}>
           <DialogHeader>
             <DialogTitle className="qr-title text-center text-2xl">QR Code لطاولة رقم: {table.number}</DialogTitle>
-            <DialogDescription className="text-center">
+            <DialogDescription className="text-center no-print">
               امسح هذا الرمز لبدء الطلب لهذه الطاولة من خلال موقعنا.
             </DialogDescription>
           </DialogHeader>
@@ -173,10 +183,10 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
               data-ai-hint="table QR code"
             />
             <p className="text-xs text-muted-foreground mt-2 text-center break-all qr-data-text">
-              بيانات الـQR: {qrCodeData}
+              بيانات الـQR (للتطوير): {qrCodeData}
             </p>
           </div>
-          <DialogFooter className="sm:justify-center">
+          <DialogFooter className="sm:justify-center no-print">
             <Button type="button" variant="outline" onClick={() => handlePrintTableQr()}>
               <Printer className="me-2 h-4 w-4" /> طباعة
             </Button>
