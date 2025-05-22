@@ -8,26 +8,59 @@ import { DUMMY_PURCHASE_ORDERS, type PurchaseOrder } from '@/constants';
 import { ListChecks, ClipboardList, CalendarDays } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
 
+const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
+  const now = new Date();
+  switch (period) {
+    case 'daily':
+      return { startDate: startOfDay(now), endDate: endOfDay(now) };
+    case 'weekly':
+      return { startDate: startOfWeek(now, { locale: arSA }), endDate: endOfWeek(now, { locale: arSA }) };
+    case 'monthly':
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+    case 'quarterly':
+      return { startDate: startOfQuarter(now), endDate: endOfQuarter(now) };
+    case 'semi_annually':
+      return { startDate: startOfMonth(subMonths(now, 5)), endDate: endOfMonth(now) };
+    case 'annually':
+      return { startDate: startOfYear(now), endDate: endOfYear(now) };
+    default:
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+  }
+};
+
 export default function PurchaseOrdersSummaryReportPage() {
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
-  const [recentPurchaseOrders, setRecentPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [displayedPurchaseOrders, setDisplayedPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly');
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    setTotalPurchaseOrdersCount(DUMMY_PURCHASE_ORDERS.length);
-    setRecentPurchaseOrders(DUMMY_PURCHASE_ORDERS.slice(0, 10).sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())); // Show more recent ones
-    const poAmount = DUMMY_PURCHASE_ORDERS.reduce((sum, po) => sum + po.totalAmount, 0);
-    setTotalPurchaseAmount(poAmount);
-  }, [selectedPeriod]);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+
+    const filteredPurchaseOrders = DUMMY_PURCHASE_ORDERS.filter(po => {
+        const orderDate = new Date(po.orderDate);
+        return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate;
+    });
+    
+    setTotalPurchaseOrdersCount(filteredPurchaseOrders.length);
+    setDisplayedPurchaseOrders(filteredPurchaseOrders.sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()).slice(0, 10));
+    const poAmountForPeriod = filteredPurchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0);
+    setTotalPurchaseAmount(poAmountForPeriod);
+
+  }, [selectedPeriod, isClient]);
 
   const getPurchaseStatusBadgeVariant = (status: PurchaseOrder['status']) => {
     switch (status) {
@@ -43,6 +76,18 @@ export default function PurchaseOrdersSummaryReportPage() {
     setSelectedPeriod(value as ReportPeriod);
   };
 
+  const getPeriodLabel = () => {
+    switch(selectedPeriod) {
+        case 'daily': return 'اليوم الحالي';
+        case 'weekly': return 'الأسبوع الحالي';
+        case 'monthly': return 'الشهر الحالي';
+        case 'quarterly': return 'الربع الحالي';
+        case 'semi_annually': return 'آخر 6 أشهر';
+        case 'annually': return 'السنة الحالية';
+        default: return 'الفترة المختارة';
+    }
+  };
+
   if (!isClient) {
     return (
       <>
@@ -56,7 +101,7 @@ export default function PurchaseOrdersSummaryReportPage() {
     <>
       <PageHeader 
         title="ملخص أوامر الشراء" 
-        description="نظرة عامة على أوامر الشراء للموردين وتكاليفها." 
+        description={`نظرة عامة على أوامر الشراء للموردين وتكاليفها لـ ${getPeriodLabel()}.`} 
         icon={ListChecks}
         actions={
           <div className="flex items-center gap-2">
@@ -66,13 +111,12 @@ export default function PurchaseOrdersSummaryReportPage() {
                 <SelectValue placeholder="اختر الفترة" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="daily">يومي (هذا اليوم)</SelectItem>
-                <SelectItem value="weekly">أسبوعي (هذا الأسبوع)</SelectItem>
-                <SelectItem value="monthly">شهري (هذا الشهر)</SelectItem>
-                <SelectItem value="quarterly">ربع سنوي (هذا الربع)</SelectItem>
-                <SelectItem value="semi_annually">نصف سنوي</SelectItem>
+                <SelectItem value="daily">يومي</SelectItem>
+                <SelectItem value="weekly">أسبوعي</SelectItem>
+                <SelectItem value="monthly">شهري</SelectItem>
+                <SelectItem value="quarterly">ربع سنوي</SelectItem>
+                <SelectItem value="semi_annually">نصف سنوي (آخر 6 أشهر)</SelectItem>
                 <SelectItem value="annually">سنوي</SelectItem>
-                <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -81,7 +125,7 @@ export default function PurchaseOrdersSummaryReportPage() {
       
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>إحصائيات أوامر الشراء</CardTitle>
+            <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>إحصائيات أوامر الشراء ({getPeriodLabel()})</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4">
             <div>
@@ -97,11 +141,11 @@ export default function PurchaseOrdersSummaryReportPage() {
         
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary"/>أحدث أوامر الشراء</CardTitle>
-            <CardDescription>عرض آخر 10 أوامر شراء تم إنشاؤها.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary"/>أوامر الشراء في الفترة</CardTitle>
+            <CardDescription>عرض أوامر الشراء التي تم إنشاؤها ضمن {getPeriodLabel()} (حتى 10 أوامر).</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-            {recentPurchaseOrders.length > 0 ? (
+            {displayedPurchaseOrders.length > 0 ? (
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -113,7 +157,7 @@ export default function PurchaseOrdersSummaryReportPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {recentPurchaseOrders.map(po => (
+                        {displayedPurchaseOrders.map(po => (
                             <TableRow key={po.id}>
                                 <TableCell className="font-medium">{po.orderNumber}</TableCell>
                                 <TableCell>{po.supplierName}</TableCell>
@@ -127,11 +171,12 @@ export default function PurchaseOrdersSummaryReportPage() {
                     </TableBody>
                 </Table>
             ) : (
-                <p className="p-4 text-center text-muted-foreground">لا توجد أوامر شراء مسجلة بعد.</p>
+                <p className="p-4 text-center text-muted-foreground">لا توجد أوامر شراء مسجلة لهذه الفترة.</p>
             )}
         </CardContent>
       </Card>
-      {/* Consider adding charts for purchase trends by supplier or by month */}
     </>
   );
 }
+
+    

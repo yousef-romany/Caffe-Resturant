@@ -8,6 +8,8 @@ import { DUMMY_INGREDIENTS, type Ingredient } from '@/constants';
 import { Package, AlertTriangle, Archive, CalendarDays } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// Note: Period filtering for inventory is conceptual with dummy data, as stock levels are current snapshots.
+// In a real app, inventory changes would be timestamped for historical reporting.
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
 
@@ -16,19 +18,30 @@ export default function InventorySummaryReportPage() {
   const [totalIngredients, setTotalIngredients] = useState(0);
   const [lowStockIngredientsCount, setLowStockIngredientsCount] = useState(0);
   const [lowStockItemsList, setLowStockItemsList] = useState<Ingredient[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly'); // Period might affect historical stock levels in real app
+  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly');
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    // For dummy data, inventory summary reflects current state regardless of period.
+    // In a real system, one might query historical stock levels or consumption rates for the period.
     setTotalIngredients(DUMMY_INGREDIENTS.length);
     const lowStock = DUMMY_INGREDIENTS.filter(ing => ing.lowStockThreshold !== undefined && ing.stockQuantity < ing.lowStockThreshold);
     setLowStockIngredientsCount(lowStock.length);
     setLowStockItemsList(lowStock);
-  }, [selectedPeriod]);
+  }, [selectedPeriod, isClient]);
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
+  };
+
+  const getPeriodLabel = () => {
+    // Since inventory is a snapshot, "الوقت الحالي" is most accurate for dummy data.
+    return "الوقت الحالي";
   };
 
   if (!isClient) {
@@ -44,7 +57,7 @@ export default function InventorySummaryReportPage() {
     <>
       <PageHeader 
         title="ملخص المخزون" 
-        description="نظرة عامة على حالة المخزون والمكونات التي تحتاج لإعادة طلب." 
+        description={`نظرة عامة على حالة المخزون والمكونات التي تحتاج لإعادة طلب (${getPeriodLabel()}).`} 
         icon={Archive}
          actions={
           <div className="flex items-center gap-2">
@@ -54,7 +67,10 @@ export default function InventorySummaryReportPage() {
                 <SelectValue placeholder="اختر الفترة" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="monthly">الوقت الحالي</SelectItem> {/* Simplified for dummy data */}
+                 {/* Simplified options as inventory is a snapshot */}
+                <SelectItem value="monthly">الوقت الحالي</SelectItem>
+                <SelectItem value="daily" disabled>يومي (قريباً)</SelectItem>
+                <SelectItem value="weekly" disabled>أسبوعي (قريباً)</SelectItem>
                 <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem>
               </SelectContent>
             </Select>
@@ -78,7 +94,7 @@ export default function InventorySummaryReportPage() {
                     </div>
                 </CardContent>
             </Card>
-            <Card className="shadow-lg row-span-1 lg:row-span-1"> {/* Changed row-span for better layout if only two cards */}
+            <Card className="shadow-lg row-span-1 lg:row-span-1">
                  <CardHeader>
                     <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-6 w-6 text-destructive"/>مكونات تحتاج إعادة طلب</CardTitle>
                     <CardDescription>المكونات التي وصلت إلى حد المخزون المنخفض.</CardDescription>
@@ -109,7 +125,8 @@ export default function InventorySummaryReportPage() {
                 </CardContent>
             </Card>
         </div>
-        {/* Potentially add charts for stock value, turnover rates etc. */}
     </>
   );
 }
+
+    
