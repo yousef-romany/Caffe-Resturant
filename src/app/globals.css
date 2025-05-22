@@ -246,3 +246,6 @@ body {
     color: #000 !important;
   }
 }
+ol {
+  height: fit-content !important;
+}
