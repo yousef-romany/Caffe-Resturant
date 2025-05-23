@@ -46,6 +46,7 @@ const initialNewEmployeeState: Omit<Employee, 'id' | 'hireDate'> & { hireDate: s
   email: '',
   salary: undefined,
   hireDate: new Date().toISOString().split('T')[0], // Default to today
+  is_active: true,
 };
 
 export default function EmployeesPage() {
@@ -82,17 +83,17 @@ export default function EmployeesPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      const fetchedEmployees: any[] = await currentDb.select('SELECT id, name, role, phone, email, salary, hire_date as hireDate FROM employees ORDER BY name');
-      // Ensure hireDate is a Date object, and salary is a number or undefined
+      const fetchedEmployees: any[] = await currentDb.select('SELECT id, name, role, phone, email, salary, hire_date as hireDate, is_active FROM employees ORDER BY name');
       setEmployees(fetchedEmployees.map(emp => ({
         ...emp,
-        hireDate: emp.hireDate ? parseISO(emp.hireDate) : new Date(), // parseISO if date string, fallback if needed
+        hireDate: emp.hireDate ? parseISO(emp.hireDate) : new Date(), 
         salary: emp.salary !== null && emp.salary !== undefined ? Number(emp.salary) : undefined,
+        is_active: Boolean(emp.is_active),
       })));
     } catch (error) {
       console.error("Error fetching employees:", error);
       toast({ title: "خطأ", description: "فشل في جلب بيانات الموظفين.", variant: "destructive" });
-      setEmployees([]); // Clear employees on error
+      setEmployees([]); 
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +107,10 @@ export default function EmployeesPage() {
 
   const handleRoleChange = (value: string) => {
     setNewEmployeeData(prev => ({ ...prev, role: value as EmployeeRole }));
+  };
+  
+  const handleActiveChange = (checked: boolean) => {
+    setNewEmployeeData(prev => ({ ...prev, is_active: checked }));
   };
 
   const handleSubmit = async () => {
@@ -122,30 +127,31 @@ export default function EmployeesPage() {
       name: newEmployeeData.name,
       role: newEmployeeData.role,
       phone: newEmployeeData.phone,
-      email: newEmployeeData.email || null, // Ensure NULL for empty email
-      salary: newEmployeeData.salary ? Number(newEmployeeData.salary) : null, // Ensure NULL for empty salary
-      hire_date: format(new Date(newEmployeeData.hireDate), 'yyyy-MM-dd'), // Format for DB
+      email: newEmployeeData.email || null, 
+      salary: newEmployeeData.salary ? Number(newEmployeeData.salary) : null,
+      hire_date: format(new Date(newEmployeeData.hireDate), 'yyyy-MM-dd'),
+      is_active: newEmployeeData.is_active === undefined ? true : newEmployeeData.is_active,
     };
 
     try {
       if (editingEmployee) {
         await db.execute(
-          'UPDATE employees SET name = $1, role = $2, phone = $3, email = $4, salary = $5, hire_date = $6 WHERE id = $7',
-          [employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, editingEmployee.id]
+          'UPDATE employees SET name = $1, role = $2, phone = $3, email = $4, salary = $5, hire_date = $6, is_active = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8',
+          [employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, editingEmployee.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات ${employeeDataToSave.name}.` });
       } else {
         const newEmployeeId = `emp-${Date.now()}`;
         await db.execute(
-          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, true)',
-          [newEmployeeId, employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date]
+          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [newEmployeeId, employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active]
         );
         toast({ title: "نجاح", description: `تمت إضافة الموظف ${employeeDataToSave.name}.` });
       }
       setIsDialogOpen(false);
       setEditingEmployee(null);
       setNewEmployeeData(initialNewEmployeeState);
-      await fetchEmployees(db); // Refresh data
+      await fetchEmployees(db); 
     } catch (error) {
       console.error("Error submitting employee:", error);
       toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات الموظف.", variant: "destructive" });
@@ -156,9 +162,10 @@ export default function EmployeesPage() {
     setEditingEmployee(employee);
     setNewEmployeeData({
       ...employee,
-      hireDate: format(new Date(employee.hireDate), 'yyyy-MM-dd'), // Format Date to string for input
+      hireDate: format(new Date(employee.hireDate), 'yyyy-MM-dd'), 
       salary: employee.salary ?? undefined,
       email: employee.email || '',
+      is_active: employee.is_active === undefined ? true : employee.is_active,
     });
     setIsDialogOpen(true);
   };
@@ -168,14 +175,14 @@ export default function EmployeesPage() {
       toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
       return;
     }
-    // Consider adding a confirmation dialog here in a real app
     try {
+      // Consider checking if employee is linked to critical data (e.g., system_users) before deleting
       await db.execute('DELETE FROM employees WHERE id = $1', [employeeToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف ${employeeToDelete.name}.`, variant: "destructive" });
-      await fetchEmployees(db); // Refresh data
+      await fetchEmployees(db); 
     } catch (error) {
       console.error("Error deleting employee:", error);
-      toast({ title: "خطأ في الحذف", description: "فشل حذف الموظف.", variant: "destructive" });
+      toast({ title: "خطأ في الحذف", description: "فشل حذف الموظف. قد يكون مرتبطًا ببيانات أخرى.", variant: "destructive" });
     }
   };
   
@@ -212,6 +219,7 @@ export default function EmployeesPage() {
                   <TableHead>البريد الإلكتروني</TableHead>
                   <TableHead className="text-center">الراتب ($)</TableHead>
                   <TableHead>تاريخ التعيين</TableHead>
+                  <TableHead className="text-center">نشط</TableHead>
                   <TableHead className="text-center">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
@@ -225,6 +233,9 @@ export default function EmployeesPage() {
                       <TableCell>{employee.email || '-'}</TableCell>
                       <TableCell className="text-center">{employee.salary ? `$${employee.salary.toFixed(2)}` : '-'}</TableCell>
                       <TableCell>{format(new Date(employee.hireDate), 'PP', { locale: arSA })}</TableCell>
+                       <TableCell className="text-center">
+                        {employee.is_active ? <Badge variant="default">نعم</Badge> : <Badge variant="destructive">لا</Badge>}
+                      </TableCell>
                       <TableCell className="text-center space-x-2 space-x-reverse">
                         <Button variant="ghost" size="icon" onClick={() => handleEditEmployee(employee)}>
                           <Edit className="h-4 w-4" />
@@ -237,7 +248,7 @@ export default function EmployeesPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                       لا يوجد موظفون مسجلون بعد.
                     </TableCell>
                   </TableRow>
@@ -258,13 +269,13 @@ export default function EmployeesPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto ps-2">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-left">الاسم</Label>
-              <Input id="name" name="name" value={newEmployeeData.name} onChange={handleInputChange} className="col-span-3" />
+              <Label htmlFor="nameEmp" className="text-left">الاسم</Label>
+              <Input id="nameEmp" name="name" value={newEmployeeData.name} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="role" className="text-left">الوظيفة</Label>
+              <Label htmlFor="roleEmp" className="text-left">الوظيفة</Label>
               <Select name="role" value={newEmployeeData.role} onValueChange={handleRoleChange}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger id="roleEmp" className="col-span-3">
                   <SelectValue placeholder="اختر الوظيفة" />
                 </SelectTrigger>
                 <SelectContent>
@@ -275,20 +286,30 @@ export default function EmployeesPage() {
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="phone" className="text-left">الهاتف</Label>
-              <Input id="phone" name="phone" type="tel" value={newEmployeeData.phone} onChange={handleInputChange} className="col-span-3" />
+              <Label htmlFor="phoneEmp" className="text-left">الهاتف</Label>
+              <Input id="phoneEmp" name="phone" type="tel" value={newEmployeeData.phone} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-left">البريد الإلكتروني</Label>
-              <Input id="email" name="email" type="email" value={newEmployeeData.email || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
+              <Label htmlFor="emailEmp" className="text-left">البريد الإلكتروني</Label>
+              <Input id="emailEmp" name="email" type="email" value={newEmployeeData.email || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="salary" className="text-left">الراتب ($)</Label>
-              <Input id="salary" name="salary" type="number" value={newEmployeeData.salary ?? ''} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" placeholder="اختياري" />
+              <Label htmlFor="salaryEmp" className="text-left">الراتب ($)</Label>
+              <Input id="salaryEmp" name="salary" type="number" value={newEmployeeData.salary ?? ''} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="hireDate" className="text-left">تاريخ التعيين</Label>
-              <Input id="hireDate" name="hireDate" type="date" value={newEmployeeData.hireDate} onChange={handleInputChange} className="col-span-3" />
+              <Label htmlFor="hireDateEmp" className="text-left">تاريخ التعيين</Label>
+              <Input id="hireDateEmp" name="hireDate" type="date" value={newEmployeeData.hireDate} onChange={handleInputChange} className="col-span-3" />
+            </div>
+             <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="is_active_emp" className="text-left">نشط</Label>
+                <div className="col-span-3 flex items-center">
+                    <Switch
+                        id="is_active_emp"
+                        checked={newEmployeeData.is_active}
+                        onCheckedChange={handleActiveChange}
+                    />
+                </div>
             </div>
           </div>
           <DialogFooter>
@@ -304,5 +325,6 @@ export default function EmployeesPage() {
     </>
   );
 }
+    
 
     
