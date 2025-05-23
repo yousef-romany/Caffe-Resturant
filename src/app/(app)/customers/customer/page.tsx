@@ -50,7 +50,6 @@ export default function CustomerDetailPage() {
       const idFromStorage = localStorage.getItem('selectedCustomerId');
       if (idFromStorage) {
         setCustomerId(idFromStorage);
-        // Clear from localStorage after data fetching attempt (moved to inner useEffect)
       } else {
         setIsLoading(false);
         toast({ title: "لم يتم تحديد عميل", description: "الرجاء اختيار عميل من القائمة.", variant: "destructive"});
@@ -90,9 +89,6 @@ export default function CustomerDetailPage() {
               totalSpent: Number(custData.totalSpent) || 0,
             });
 
-            // Fetch orders related to this customer by customer_id
-            // Note: The SQL schema links orders to customers via customer_id, not customerName.
-            // Adjust this query if your dummy data or actual schema is different.
             const customerOrdersResult: any[] = await db.select(
               'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, type, created_at as createdAt FROM orders WHERE customer_id = $1 ORDER BY created_at DESC',
               [customerId]
@@ -101,8 +97,7 @@ export default function CustomerDetailPage() {
               ...order,
               createdAt: order.createdAt ? parseISO(order.createdAt) : new Date(),
               totalAmount: Number(order.totalAmount) || 0,
-              // items would need another query or join if they were to be displayed here from DB
-              items: [], // Placeholder, as order_items are not fetched here
+              items: [], // Items are not fetched here for this overview table
             })));
 
           } else {
@@ -117,14 +112,14 @@ export default function CustomerDetailPage() {
           setOrders([]);
         } finally {
           setIsLoading(false);
-          localStorage.removeItem('selectedCustomerId'); // Clear after fetching
+          localStorage.removeItem('selectedCustomerId'); 
         }
-      } else if (!customerId && !isLoading) { // Handle case where customerId was not set from localStorage
+      } else if (!customerId && !isLoading) { 
         setIsLoading(false);
       }
     }
     fetchCustomerAndOrders();
-  }, [db, customerId, toast, isLoading]); // Added isLoading to dependencies
+  }, [db, customerId, toast]); // Removed isLoading from dependencies
 
   const availableYears = useMemo(() => {
     const years = new Set(orders.map(order => getYear(new Date(order.createdAt)).toString()));
@@ -292,7 +287,5 @@ export default function CustomerDetailPage() {
     </>
   );
 }
-
-    
 
     

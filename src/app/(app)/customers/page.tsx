@@ -109,28 +109,46 @@ export default function CustomersPage() {
       toast({ title: "خطأ", description: "الاسم، الهاتف، وتاريخ الانضمام مطلوبون.", variant: "destructive" });
       return;
     }
+    // Basic phone validation (e.g., starts with 05 and is 10 digits long for SA numbers)
+    if (!/^05\d{8}$/.test(newCustomerData.phone)) {
+        toast({
+            title: "خطأ في رقم الهاتف",
+            description: "الرجاء إدخال رقم هاتف سعودي صالح (e.g., 05xxxxxxxx).",
+            variant: "destructive",
+        });
+        return;
+    }
+    if (newCustomerData.email && !/\S+@\S+\.\S+/.test(newCustomerData.email)) {
+        toast({
+            title: "خطأ في البريد الإلكتروني",
+            description: "الرجاء إدخال عنوان بريد إلكتروني صالح أو تركه فارغًا.",
+            variant: "destructive",
+        });
+        return;
+    }
+
 
     const customerDataToSave = {
       name: newCustomerData.name,
       phone: newCustomerData.phone,
       email: newCustomerData.email || null,
-      loyaltyPoints: Number(newCustomerData.loyaltyPoints) || 0,
-      join_date: format(new Date(newCustomerData.joinDate), 'yyyy-MM-dd'),
+      loyalty_points: Number(newCustomerData.loyaltyPoints) || 0,
+      join_date: format(new Date(newCustomerData.joinDate), 'yyyy-MM-dd'), // Format date for DB
       notes: newCustomerData.notes || null,
     };
 
     try {
       if (editingCustomer) {
         await db.execute(
-          'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4, join_date = $5, notes = $6 WHERE id = $7',
-          [customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyaltyPoints, customerDataToSave.join_date, customerDataToSave.notes, editingCustomer.id]
+          'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4, join_date = $5, notes = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+          [customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyalty_points, customerDataToSave.join_date, customerDataToSave.notes, editingCustomer.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات العميل ${customerDataToSave.name}.` });
       } else {
         const newCustomerId = `cust-${Date.now()}`;
         await db.execute(
           'INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, notes, total_spent) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)',
-          [newCustomerId, customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyaltyPoints, customerDataToSave.join_date, customerDataToSave.notes]
+          [newCustomerId, customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyalty_points, customerDataToSave.join_date, customerDataToSave.notes]
         );
         toast({ title: "نجاح", description: `تمت إضافة العميل ${customerDataToSave.name}.` });
       }
@@ -140,7 +158,7 @@ export default function CustomersPage() {
       await fetchCustomers(db);
     } catch (error) {
       console.error("Error submitting customer:", error);
-      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات العميل.", variant: "destructive" });
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات العميل. قد يكون رقم الهاتف أو البريد مكرر.", variant: "destructive" });
     }
   };
 
@@ -161,12 +179,17 @@ export default function CustomersPage() {
       return;
     }
     try {
+      // Consider checking for related orders before deleting
       await db.execute('DELETE FROM customers WHERE id = $1', [customerToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف العميل ${customerToDelete.name}.`, variant: "destructive" });
       await fetchCustomers(db);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting customer:", error);
-      toast({ title: "خطأ في الحذف", description: "فشل حذف العميل.", variant: "destructive" });
+      if (error.message && error.message.toLowerCase().includes("foreign key constraint fails")) {
+        toast({ title: "خطأ في الحذف", description: "لا يمكن حذف هذا العميل لأنه مرتبط بطلبات أو بيانات أخرى.", variant: "destructive" });
+      } else {
+        toast({ title: "خطأ في الحذف", description: "فشل حذف العميل.", variant: "destructive" });
+      }
     }
   };
 

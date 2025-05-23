@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
-import { type Order, type OrderStatus, type OrderType, type OrderItem as AppOrderItem } from '@/constants'; // Renamed OrderItem to AppOrderItem to avoid conflict
+import { type Order as AppOrder, type OrderStatus, type OrderType, type OrderItem as AppOrderItem } from '@/constants';
 import {
   Table,
   TableBody,
@@ -44,30 +44,22 @@ import { useToast } from '@/hooks/use-toast';
 const ORDER_STATUSES: OrderStatus[] = ["قيد الانتظار", "قيد التجهيز", "جاهز", "مكتمل", "ملغى"];
 const ORDER_TYPES: OrderType[] = ["صالة", "سفري", "توصيل"];
 
-// Interface for Order fetched from DB (basic info)
 interface FetchedOrder {
   id: string;
   order_number: string;
-  created_at: string; // ISO string from DB
+  created_at: string; 
   type: OrderType;
   customer_name?: string;
-  table_number?: string; // Will be fetched if table_id exists
+  table_number?: string; 
   captain_name?: string;
   total_amount: number;
   status: OrderStatus;
-  // Fields that might be needed for display from JOINs or further processing
-  table_id?: string; // From orders table
+  table_id?: string;
 }
 
-// Interface for detailed order item from DB
-interface DetailedOrderItem {
-  id: string;
-  menu_item_name: string;
-  quantity: number;
-  price_at_order: number;
-  notes?: string;
-  image_url?: string; // Assuming we can get this, or a placeholder
-  data_ai_hint?: string;
+interface DetailedOrderItem extends AppOrderItem {
+  // Inherits from AppOrderItem, can add more DB specific fields if needed
+  // menu_item_name, quantity, price_at_order, notes, image_url, data_ai_hint are expected
 }
 
 
@@ -109,7 +101,6 @@ export default function OrdersPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      // Fetch orders and join with tables_info to get table_number if available
       const fetchedOrders: any[] = await currentDb.select(`
         SELECT 
           o.id, 
@@ -120,7 +111,8 @@ export default function OrdersPage() {
           o.captain_name,
           o.total_amount, 
           o.status,
-          ti.number as table_number 
+          ti.number as table_number,
+          o.table_id 
         FROM orders o
         LEFT JOIN tables_info ti ON o.table_id = ti.id
         ORDER BY o.created_at DESC
@@ -145,28 +137,33 @@ export default function OrdersPage() {
     }
     setSelectedOrder(order);
     setIsFetchingOrderDetails(true);
-    setDetailedOrderItems([]); // Clear previous items
+    setDetailedOrderItems([]);
     try {
       const items: any[] = await db.select(
         `SELECT 
           oi.id, 
-          oi.menu_item_name, 
+          oi.menu_item_id,
+          oi.menu_item_name as name, 
           oi.quantity, 
-          oi.price_at_order, 
+          oi.price_at_order as price, 
           oi.notes,
-          mi.image_url, 
-          mi.data_ai_hint 
+          mi.image_url as imageUrl, 
+          mi.data_ai_hint as dataAiHint,
+          mi.category
          FROM order_items oi
          LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
          WHERE oi.order_id = $1`,
         [order.id]
       );
       setDetailedOrderItems(items.map(item => ({
-        ...item,
+        id: item.menu_item_id, // Use menu_item_id as the core ID for the item
+        name: item.name,
+        category: item.category as Category,
+        price: Number(item.price) || 0,
         quantity: Number(item.quantity) || 0,
-        price_at_order: Number(item.price_at_order) || 0,
-        image_url: item.image_url || 'https://placehold.co/50x50.png', // Default placeholder
-        data_ai_hint: item.data_ai_hint || 'food item'
+        imageUrl: item.imageUrl || 'https://placehold.co/50x50.png',
+        dataAiHint: item.dataAiHint || 'food item',
+        notes: item.notes,
       })));
     } catch (error) {
       console.error("Error fetching order items:", error);
@@ -331,7 +328,6 @@ export default function OrdersPage() {
               <p><strong>النوع:</strong> {selectedOrder.type}</p>
               {selectedOrder.type === 'صالة' && selectedOrder.table_number && <p><strong>الطاولة:</strong> {selectedOrder.table_number}</p>}
               {selectedOrder.customer_name && <p><strong>العميل:</strong> {selectedOrder.customer_name}</p>}
-              {/* {selectedOrder.type === 'توصيل' && selectedOrder.deliveryAddress && <p><strong>العنوان:</strong> {selectedOrder.deliveryAddress}</p>} */}
               {selectedOrder.type === 'توصيل' && selectedOrder.captain_name && <p><strong>الكابتن:</strong> {selectedOrder.captain_name}</p>}
               
               <h4 className="font-semibold mt-4 flex items-center gap-1"><PackageOpen className="h-5 w-5 text-primary"/> العناصر:</h4>
@@ -339,22 +335,22 @@ export default function OrdersPage() {
                 <p className="text-center text-muted-foreground py-4">جارٍ تحميل عناصر الطلب...</p>
               ) : detailedOrderItems.length > 0 ? (
                 <ul className="space-y-2">
-                  {detailedOrderItems.map(item => (
-                    <li key={item.id} className="flex items-start gap-3 p-2 border rounded-md">
+                  {detailedOrderItems.map((item: DetailedOrderItem, index: number) => ( // Added type for item
+                    <li key={`${item.id}-${index}`} className="flex items-start gap-3 p-2 border rounded-md">
                       <NextImage 
-                        src={item.image_url || 'https://placehold.co/50x50.png'} 
-                        alt={item.menu_item_name} 
+                        src={item.imageUrl || 'https://placehold.co/50x50.png'} 
+                        alt={item.name} 
                         width={50} 
                         height={50} 
                         className="rounded-md h-12 w-12 object-cover" 
-                        data-ai-hint={item.data_ai_hint || "food item"}
+                        data-ai-hint={item.dataAiHint || "food item"}
                       />
                       <div className="flex-grow">
-                        <p className="font-medium">{item.menu_item_name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
-                        <p className="text-sm text-muted-foreground">${item.price_at_order.toFixed(2)} لكل عنصر</p>
+                        <p className="font-medium">{item.name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
+                        <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} لكل عنصر</p>
                         {item.notes && <p className="text-xs text-blue-600 italic">ملاحظات: {item.notes}</p>}
                       </div>
-                      <p className="font-medium text-sm">${(item.price_at_order * item.quantity).toFixed(2)}</p>
+                      <p className="font-medium text-sm">${(item.price * item.quantity).toFixed(2)}</p>
                     </li>
                   ))}
                 </ul>
@@ -375,3 +371,5 @@ export default function OrdersPage() {
     </>
   );
 }
+
+    
