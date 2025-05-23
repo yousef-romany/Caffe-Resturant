@@ -7,12 +7,10 @@ import { PageHeader } from '@/components/custom/PageHeader';
 import { MenuItemCard } from '@/components/custom/MenuItemCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DUMMY_MENU_ITEMS, ITEM_CATEGORIES, type MenuItem, type Category } from '@/constants';
+import { ITEM_CATEGORIES, type MenuItem, type Category } from '@/constants';
 import { Search, ListFilter, Utensils, ShoppingCart, PlusCircle, MinusCircle, XCircle, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Keep Card for MenuItemCard, remove if not used elsewhere
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import {
   Sheet,
@@ -21,8 +19,9 @@ import {
   SheetTitle,
   SheetFooter,
   SheetTrigger,
-  SheetClose,
 } from "@/components/ui/sheet";
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
 // Simplified OrderItem for client-side cart
 interface CartItem extends MenuItem {
@@ -31,6 +30,8 @@ interface CartItem extends MenuItem {
 }
 
 export default function CustomerMenuPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | 'الكل'>('الكل');
@@ -41,14 +42,52 @@ export default function CustomerMenuPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   useEffect(() => {
-    setMenuItems(DUMMY_MENU_ITEMS);
+    async function initializeDbAndLoadMenu() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+        if (dbInstance) {
+          await fetchMenuItems(dbInstance);
+        } else {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error("Error initializing DB for customer menu:", error);
+        toast({ title: "خطأ في التهيئة", description: "فشل تهيئة قاعدة البيانات لعرض القائمة.", variant: "destructive" });
+        setIsLoading(false);
+      }
+    }
+    initializeDbAndLoadMenu();
 
     const tableIdFromStorage = localStorage.getItem('customer_selected_table_id');
     const tableNumberFromStorage = localStorage.getItem('customer_selected_table_number');
     if (tableIdFromStorage && tableNumberFromStorage) {
       setSelectedTable({ id: tableIdFromStorage, number: tableNumberFromStorage });
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  const fetchMenuItems = async (currentDb: Database) => {
+    setIsLoading(true);
+    try {
+      const itemsData: any[] = await currentDb.select(
+        "SELECT id, name, category, price, cost, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items WHERE is_available = TRUE ORDER BY category, name"
+      );
+      setMenuItems(itemsData.map(item => ({
+        ...item, 
+        price: Number(item.price), 
+        cost: item.cost ? Number(item.cost) : undefined,
+        is_available: Boolean(item.is_available) 
+      })));
+    } catch (error) {
+      console.error("Error fetching menu items:", error);
+      toast({ title: "خطأ", description: "فشل في جلب عناصر القائمة من قاعدة البيانات.", variant: "destructive" });
+      setMenuItems([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const filteredMenuItems = useMemo(() => {
     return menuItems.filter(item => 
@@ -104,19 +143,36 @@ export default function CustomerMenuPage() {
     return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cartItems]);
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => { // Marked as async for future DB operations
     if (cartItems.length === 0) {
       toast({ title: "سلة الطلبات فارغة!", description: "الرجاء إضافة بعض العناصر أولاً.", variant: "destructive" });
       return;
     }
-    console.log("Placing order:", cartItems, "for table:", selectedTable);
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة. لا يمكن إرسال الطلب.", variant: "destructive" });
+      return;
+    }
+
+    // TODO: Implement actual order placement logic to the database
+    // This will involve:
+    // 1. Creating a new order in the 'orders' table (status: 'قيد الانتظار', type: selectedTable.id ? 'صالة' : 'سفري' or based on user choice)
+    // 2. Getting the new order_id.
+    // 3. Inserting each cartItem into the 'order_items' table, linked to the new order_id.
+    // 4. If it's a table order, update the table status in 'tables_info'.
+    // 5. Clear localStorage for table selection.
+
+    console.log("Placing order (DB integration pending):", cartItems, "for table:", selectedTable);
     toast({
       title: "تم إرسال الطلب بنجاح (تجريبي)",
       description: `إجمالي الطلب: $${cartSubtotal.toFixed(2)}. ${selectedTable.number ? `لطاولة رقم ${selectedTable.number}` : ''}`,
       className: "bg-green-500 text-white"
     });
     setCartItems([]); 
-    setIsSheetOpen(false); // Close sheet after placing order
+    setIsSheetOpen(false); 
+    // Potentially clear selectedTable from localStorage or state after successful order for a table
+    // localStorage.removeItem('customer_selected_table_id');
+    // localStorage.removeItem('customer_selected_table_number');
+    // setSelectedTable({ id: null, number: null });
   };
 
   return (
@@ -127,7 +183,6 @@ export default function CustomerMenuPage() {
         icon={Utensils}
       />
       
-      {/* Cart Trigger Button - Positioned fixed or relatively as needed */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetTrigger asChild>
           <Button
@@ -139,7 +194,7 @@ export default function CustomerMenuPage() {
             <ShoppingCart className="h-6 w-6" />
             {cartItems.length > 0 && (
               <Badge variant="secondary" className="absolute -top-1 -right-1 rtl:-left-1 rtl:-right-auto rounded-full px-1.5 py-0.5 text-xs">
-                {cartItems.length}
+                {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
               </Badge>
             )}
             <span className="sr-only">عرض سلة الطلبات</span>
@@ -194,14 +249,13 @@ export default function CustomerMenuPage() {
                 </span>
               </div>
               <Button onClick={handlePlaceOrder} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                إرسال الطلب (تجريبي)
+                إرسال الطلب (DB قيد التنفيذ)
               </Button>
             </SheetFooter>
           )}
         </SheetContent>
       </Sheet>
       
-      {/* Menu Items Section */}
       <div>
         <div className="mb-6 p-4 bg-card rounded-lg shadow-md">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
@@ -238,7 +292,9 @@ export default function CustomerMenuPage() {
           </div>
         </div>
 
-        {filteredMenuItems.length > 0 ? (
+        {isLoading ? (
+          <p className="text-center text-muted-foreground py-10 text-lg">جارٍ تحميل عناصر القائمة...</p>
+        ) : filteredMenuItems.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredMenuItems.map(item => (
               <MenuItemCard
@@ -251,10 +307,11 @@ export default function CustomerMenuPage() {
           </div>
         ) : (
           <p className="text-center text-muted-foreground py-10 text-lg">
-            {searchTerm || selectedCategory !== 'الكل' ? "لا توجد عناصر تطابق بحثك أو الفلتر المحدد." : "قائمة الطعام فارغة حاليًا. يرجى المحاولة لاحقًا!"}
+            {menuItems.length === 0 ? "قائمة الطعام فارغة حاليًا. يرجى المحاولة لاحقًا!" : "لا توجد عناصر تطابق بحثك أو الفلتر المحدد."}
           </p>
         )}
       </div>
     </div>
   );
 }
+
