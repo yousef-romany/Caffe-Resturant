@@ -33,18 +33,19 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Store Information State
-  const [storeName, setStoreName] = useState('كافيه بوس إكسبريس');
-  const [storeAddress, setStoreAddress] = useState('123 الشارع الرئيسي, أي مدينة');
-  const [storeContactPhone, setStoreContactPhone] = useState('+1 (555) 123-4567');
+  const [storeName, setStoreName] = useState('');
+  const [storeAddress, setStoreAddress] = useState('');
+  const [storeContactPhone, setStoreContactPhone] = useState('');
 
   // Tax and Discount State
-  const [isVatEnabled, setIsVatEnabled] = useState(true);
-  const [vatPercentage, setVatPercentage] = useState(14); // Default from original constant
+  const [isVatEnabled, setIsVatEnabled] = useState(false);
+  const [vatPercentage, setVatPercentage] = useState(0);
   const [isGlobalDiscountEnabled, setIsGlobalDiscountEnabled] = useState(false);
   const [globalDiscountPercentage, setGlobalDiscountPercentage] = useState(0);
 
   useEffect(() => {
     async function initializeDbAndLoadSettings() {
+      setIsLoading(true);
       try {
         const dbInstance = await getDb();
         setDbInstance(dbInstance);
@@ -64,7 +65,6 @@ export default function SettingsPage() {
   }, [toast]); // toast is stable
 
   const loadAllSettings = async (currentDb: Database) => {
-    setIsLoading(true);
     try {
       const settingsResult: any[] = await currentDb.select('SELECT setting_key, setting_value FROM app_settings');
       const settingsMap = new Map(settingsResult.map(s => [s.setting_key, s.setting_value]));
@@ -74,15 +74,20 @@ export default function SettingsPage() {
       setStoreContactPhone(settingsMap.get(SETTING_KEYS.STORE_CONTACT_PHONE) || '+1 (555) 123-4567');
 
       setIsVatEnabled(settingsMap.get(SETTING_KEYS.IS_VAT_ENABLED) === 'true');
-      setVatPercentage(parseFloat(settingsMap.get(SETTING_KEYS.VAT_PERCENTAGE) || '14'));
+      setVatPercentage(parseFloat(settingsMap.get(SETTING_KEYS.VAT_PERCENTAGE) || '14')); // Default 14 if not set
       setIsGlobalDiscountEnabled(settingsMap.get(SETTING_KEYS.IS_GLOBAL_DISCOUNT_ENABLED) === 'true');
       setGlobalDiscountPercentage(parseFloat(settingsMap.get(SETTING_KEYS.GLOBAL_DISCOUNT_PERCENTAGE) || '0'));
-
     } catch (error) {
       console.error("Error loading settings:", error);
       toast({ title: "خطأ", description: "فشل تحميل الإعدادات من قاعدة البيانات.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
+      // Set defaults on error
+      setStoreName('كافيه بوس إكسبريس');
+      setStoreAddress('123 الشارع الرئيسي, أي مدينة');
+      setStoreContactPhone('+1 (555) 123-4567');
+      setIsVatEnabled(true);
+      setVatPercentage(14);
+      setIsGlobalDiscountEnabled(false);
+      setGlobalDiscountPercentage(0);
     }
   };
 
@@ -92,7 +97,6 @@ export default function SettingsPage() {
       return false;
     }
     try {
-      // Attempt to update; if no rows affected, then insert (UPSERT logic)
       const updateResult: any = await db.execute(
         "UPDATE app_settings SET setting_value = $1, updated_at = CURRENT_TIMESTAMP WHERE setting_key = $2",
         [value, key]
@@ -100,7 +104,7 @@ export default function SettingsPage() {
 
       if (updateResult.rowsAffected === 0) {
         await db.execute(
-          "INSERT INTO app_settings (setting_key, setting_value) VALUES ($1, $2)",
+          "INSERT INTO app_settings (setting_key, setting_value, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
           [key, value]
         );
       }
@@ -113,6 +117,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveStoreInfo = async () => {
+    setIsLoading(true);
     let success = true;
     success &&= await saveSetting(SETTING_KEYS.STORE_NAME, storeName);
     success &&= await saveSetting(SETTING_KEYS.STORE_ADDRESS, storeAddress);
@@ -120,9 +125,11 @@ export default function SettingsPage() {
     if (success) {
       toast({ title: "نجاح", description: "تم حفظ معلومات المتجر." });
     }
+    setIsLoading(false);
   };
 
   const handleSaveTaxDiscountSettings = async () => {
+    setIsLoading(true);
     let success = true;
     success &&= await saveSetting(SETTING_KEYS.IS_VAT_ENABLED, isVatEnabled.toString());
     success &&= await saveSetting(SETTING_KEYS.VAT_PERCENTAGE, vatPercentage.toString());
@@ -131,10 +138,14 @@ export default function SettingsPage() {
     if (success) {
       toast({ title: "نجاح", description: "تم حفظ إعدادات الضريبة والخصم." });
     }
+    setIsLoading(false);
   };
 
-  if (isLoading && !db) {
-    return <PageHeader title="الإعدادات" description="جارٍ تحميل الإعدادات..." />;
+  if (isLoading && !db) { // Initial loading for DB connection
+    return <PageHeader title="الإعدادات" description="جارٍ الاتصال بقاعدة البيانات..." />;
+  }
+  if (isLoading) { // Loading for settings data
+     return <PageHeader title="الإعدادات" description="جارٍ تحميل الإعدادات..." />;
   }
 
 
@@ -162,8 +173,8 @@ export default function SettingsPage() {
               <Label htmlFor="storeContact">هاتف الاتصال</Label>
               <Input id="storeContact" value={storeContactPhone} onChange={(e) => setStoreContactPhone(e.target.value)} className="mt-1" />
             </div>
-            <Button onClick={handleSaveStoreInfo} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Save className="h-4 w-4 me-2"/> حفظ معلومات المتجر
+            <Button onClick={handleSaveStoreInfo} disabled={isLoading} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Save className="h-4 w-4 me-2"/> {isLoading ? 'جارٍ الحفظ...' : 'حفظ معلومات المتجر'}
             </Button>
           </CardContent>
         </Card>
@@ -188,6 +199,7 @@ export default function SettingsPage() {
                   id="enableVat"
                   checked={isVatEnabled}
                   onCheckedChange={setIsVatEnabled}
+                  disabled={isLoading}
                 />
               </div>
               {isVatEnabled && (
@@ -204,6 +216,7 @@ export default function SettingsPage() {
                         className="pe-10 rtl:ps-10 rtl:pe-3"
                         min="0"
                         max="100"
+                        disabled={isLoading}
                       />
                     </div>
                   </div>
@@ -223,6 +236,7 @@ export default function SettingsPage() {
                   id="enableGlobalDiscount"
                   checked={isGlobalDiscountEnabled}
                   onCheckedChange={setIsGlobalDiscountEnabled}
+                  disabled={isLoading}
                 />
               </div>
               {isGlobalDiscountEnabled && (
@@ -239,14 +253,15 @@ export default function SettingsPage() {
                         className="pe-10 rtl:ps-10 rtl:pe-3"
                         min="0"
                         max="100"
+                        disabled={isLoading}
                       />
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <Button onClick={handleSaveTaxDiscountSettings} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Save className="h-4 w-4 me-2"/> حفظ إعدادات الضريبة والخصم
+            <Button onClick={handleSaveTaxDiscountSettings} disabled={isLoading} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Save className="h-4 w-4 me-2"/> {isLoading ? 'جارٍ الحفظ...' : 'حفظ إعدادات الضريبة والخصم'}
             </Button>
           </CardContent>
         </Card>
@@ -256,22 +271,22 @@ export default function SettingsPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle>إعدادات الحساب</CardTitle>
-            <CardDescription>إدارة تفاصيل حسابك الشخصي.</CardDescription>
+            <CardDescription>إدارة تفاصيل حسابك الشخصي (المستخدم الحالي المسجل دخوله).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="userName">اسمك</Label>
+                  <Label htmlFor="userName">اسمك (Placeholder)</Label>
                   <Input id="userName" defaultValue="المسؤول" className="mt-1" disabled/>
                 </div>
                 <div>
-                  <Label htmlFor="userEmail">البريد الإلكتروني</Label>
+                  <Label htmlFor="userEmail">البريد الإلكتروني (Placeholder)</Label>
                   <Input id="userEmail" type="email" defaultValue="admin@example.com" className="mt-1" disabled/>
                 </div>
             </div>
             <div>
-              <Label htmlFor="userPassword">تغيير كلمة المرور</Label>
-              <Input id="userPassword" type="password" placeholder="كلمة المرور الجديدة" className="mt-1" />
+              <Label htmlFor="userPassword">تغيير كلمة المرور (Placeholder)</Label>
+              <Input id="userPassword" type="password" placeholder="كلمة المرور الجديدة" className="mt-1" disabled/>
             </div>
             <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled>تحديث الحساب (قريباً)</Button>
           </CardContent>
@@ -301,7 +316,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-
          <Separator />
 
         <Card className="shadow-lg">
@@ -311,11 +325,11 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-                <Label htmlFor="receiptPrinter">طابعة الإيصالات</Label>
+                <Label htmlFor="receiptPrinter">طابعة الإيصالات (Placeholder)</Label>
                 <Input id="receiptPrinter" defaultValue="طابعة حرارية (USB)" className="mt-1" disabled/>
             </div>
             <div>
-                <Label htmlFor="kitchenPrinter">طابعة المطبخ</Label>
+                <Label htmlFor="kitchenPrinter">طابعة المطبخ (Placeholder)</Label>
                 <Input id="kitchenPrinter" defaultValue="طابعة شبكة (LAN)" className="mt-1" disabled/>
             </div>
             <Button disabled className="bg-primary hover:bg-primary/90 text-primary-foreground">تكوين الطابعات (قريباً)</Button>
