@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, type Order, type OrderType, type Table, OrderStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
+import { ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, type Order, type OrderType, type Table, type OrderStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
 import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer, Percent, Store, Car, Utensils } from 'lucide-react';
 import {
   Dialog,
@@ -148,14 +148,15 @@ export default function POSPage() {
 
   const [orderType, setOrderType] = useState<OrderType | ''>('');
   const [tableNumber, setTableNumber] = useState('');
-  const [tableId, setTableId] = useState<string | null>(null); // Store tableId for DB operations
+  const [tableId, setTableId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [generalOrderNotes, setGeneralOrderNotes] = useState('');
   
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [confirmedOrderForInvoice, setConfirmedOrderForInvoice] = useState<Order | null>(null);
-  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To store ID of order being edited
+  const [currentOrderNumber, setCurrentOrderNumber] = useState<string | null>(null); // To display order number when editing
   const [invoiceLanguage, setInvoiceLanguage] = useState<'ar' | 'en'>('ar');
 
   const [isDiscountEnabled, setIsDiscountEnabled] = useState(false);
@@ -179,6 +180,7 @@ export default function POSPage() {
     setDeliveryAddress('');
     setGeneralOrderNotes('');
     setCurrentOrderId(null);
+    setCurrentOrderNumber(null);
     setSearchTerm(''); 
     setSelectedCategory('الكل'); 
     setIsDiscountEnabled(false);
@@ -194,7 +196,7 @@ export default function POSPage() {
     if (navigateToTables) {
       router.push('/tables');
     }
-    router.replace(pathname); // Clean URL from any query params if any existed
+    router.replace(pathname); 
   }, [router, pathname]);
 
   useEffect(() => {
@@ -209,19 +211,16 @@ export default function POSPage() {
           return;
         }
 
-        // Fetch Menu Items
-        const menuItemsData: MenuItem[] = await dbInstance.select(
+        const menuItemsData: any[] = await dbInstance.select(
           "SELECT id, name, category, price, cost, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items WHERE is_available = TRUE ORDER BY category, name"
         );
-        setDbMenuItems(menuItemsData.map(item => ({...item, price: Number(item.price), cost: item.cost ? Number(item.cost) : undefined })));
+        setDbMenuItems(menuItemsData.map(item => ({...item, price: Number(item.price), cost: item.cost ? Number(item.cost) : undefined, is_available: Boolean(item.is_available) })));
 
-        // Fetch Available Tables (initially, can be refetched if needed)
-        const tablesData: Table[] = await dbInstance.select(
+        const tablesData: any[] = await dbInstance.select(
           "SELECT id, number, status, capacity, current_order_id as orderId FROM tables_info WHERE status = 'متاحة' ORDER BY CAST(number AS UNSIGNED), number"
         );
-        setDbAvailableTables(tablesData);
+        setDbAvailableTables(tablesData.map(t => ({ ...t, capacity: Number(t.capacity)})));
 
-        // Load POS state from localStorage
         const tableNumFromStorage = localStorage.getItem('pos_target_table_number');
         const tableIdFromStorage = localStorage.getItem('pos_target_table_id');
         const orderIdFromStorage = localStorage.getItem('pos_target_order_id');
@@ -232,18 +231,20 @@ export default function POSPage() {
         localStorage.removeItem('pos_target_order_id');
         localStorage.removeItem('pos_action');
 
-        if (orderIdFromStorage) { // Editing an existing order
+        if (orderIdFromStorage) { 
           setCurrentOrderId(orderIdFromStorage);
           const existingOrderResult: any[] = await dbInstance.select("SELECT * FROM orders WHERE id = $1", [orderIdFromStorage]);
           if (existingOrderResult.length > 0) {
             const existingOrder = existingOrderResult[0];
-            const itemsResult: OrderItem[] = await dbInstance.select(
+            const itemsResult: any[] = await dbInstance.select(
               "SELECT mi.id, mi.name, mi.category, oi.price_at_order as price, oi.quantity, oi.notes, mi.image_url as imageUrl, mi.data_ai_hint as dataAiHint FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE oi.order_id = $1",
               [orderIdFromStorage]
             );
 
             setCurrentOrder(itemsResult.map(item => ({...item, price: Number(item.price), quantity: Number(item.quantity)})));
             setOrderType(existingOrder.type as OrderType);
+            setCurrentOrderNumber(existingOrder.order_number);
+
             if (existingOrder.type === 'صالة' && existingOrder.table_id) {
               const tableInfo: any[] = await dbInstance.select("SELECT number FROM tables_info WHERE id = $1", [existingOrder.table_id]);
               if (tableInfo.length > 0) {
@@ -254,22 +255,21 @@ export default function POSPage() {
             setGeneralOrderNotes(existingOrder.notes || '');
             setCustomerName(existingOrder.customer_name || '');
             setDeliveryAddress(existingOrder.delivery_address || '');
-            setIsDiscountEnabled(!!existingOrder.discount_percentage && existingOrder.discount_percentage > 0);
+            setIsDiscountEnabled(existingOrder.discount_percentage != null && existingOrder.discount_percentage > 0);
             setDiscountPercentage(Number(existingOrder.discount_percentage) || 0);
-            setIsVatEnabled(!!existingOrder.vat_percentage && existingOrder.vat_percentage > 0);
+            setIsVatEnabled(existingOrder.vat_percentage != null && existingOrder.vat_percentage > 0);
           } else {
             toast({ title: "خطأ في الطلب", description: `لم يتم العثور على الطلب ${orderIdFromStorage}. بدء طلب جديد.`, variant: "destructive" });
             resetPOSSession(false);
           }
-        } else if (tableIdFromStorage && tableNumFromStorage) { // New order for a specific table
+        } else if (tableIdFromStorage && tableNumFromStorage) {
           setOrderType('صالة');
           setTableNumber(tableNumFromStorage);
           setTableId(tableIdFromStorage);
-          // Ensure this table is still available, or handle if occupied by another session
           const tableStatusResult: any[] = await dbInstance.select("SELECT status FROM tables_info WHERE id = $1", [tableIdFromStorage]);
           if (tableStatusResult.length > 0 && tableStatusResult[0].status !== 'متاحة' && tableStatusResult[0].status !== 'محجوزة') {
              toast({ title: "تنبيه", description: `الطاولة ${tableNumFromStorage} مشغولة حاليًا بطلب آخر أو تحتاج تنظيف.`, variant: "destructive"});
-             resetPOSSession(true); // Navigate back to tables
+             resetPOSSession(true); 
           }
         }
       } catch (error) {
@@ -280,8 +280,7 @@ export default function POSPage() {
       }
     }
     initializeAndLoadData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Should run once on mount. resetPOSSession is memoized.
+  }, [toast, resetPOSSession]); 
 
   const filteredMenuItems = useMemo(() => {
     return dbMenuItems.filter(item =>
@@ -291,9 +290,13 @@ export default function POSPage() {
   }, [searchTerm, selectedCategory, dbMenuItems]);
 
   const availableTablesForSelection = useMemo(() => {
-    if (currentOrderId && orderType === 'صالة' && tableId) { // Editing an existing table order
-        const currentTable = dbAvailableTables.find(t => t.id === tableId) || (tableNumber && tableId ? [{id: tableId, number: tableNumber, capacity:0, status: 'مشغولة' as TableStatus}] : []); // Add current table if not in available list
-        return Array.isArray(currentTable) ? currentTable : (currentTable ? [currentTable] : []);
+    if (currentOrderId && orderType === 'صالة' && tableId) { 
+        const currentTableInList = dbAvailableTables.find(t => t.id === tableId);
+        if (currentTableInList) return [currentTableInList]; // If current table is 'available'
+        // If current table is 'مشغولة', it won't be in dbAvailableTables. Add it manually.
+        const currentTableFromDb = tables.find(t => t.id === tableId); // Assuming 'tables' is a full list
+        if (currentTableFromDb) return [currentTableFromDb];
+        return tableNumber && tableId ? [{id: tableId, number: tableNumber, capacity:0, status: 'مشغولة' as TableStatus}] : [];
     }
     return dbAvailableTables;
   }, [currentOrderId, orderType, tableId, tableNumber, dbAvailableTables]);
@@ -389,7 +392,7 @@ export default function POSPage() {
     let orderSpecificsMet = true;
     let missingFieldMessage = "";
 
-    if (orderType === 'صالة' && !tableId) { // Check for tableId
+    if (orderType === 'صالة' && !tableId) {
       orderSpecificsMet = false;
       missingFieldMessage = "الرجاء اختيار طاولة لطلبات الصالة.";
     }
@@ -410,10 +413,20 @@ export default function POSPage() {
     const { subtotal, discountAmount, vatAmount, finalTotal } = orderCalculations;
     const now = new Date().toISOString();
     let orderToConfirmForInvoice: Order;
+    let orderStatusForNewOrder: OrderStatus = 'قيد الانتظار';
 
     try {
       setIsLoading(true);
       if (currentOrderId) { 
+        const existingOrderDataResult: any[] = await db.select("SELECT status, created_at, order_number FROM orders WHERE id = $1", [currentOrderId]);
+        if (existingOrderDataResult.length === 0) {
+            toast({ title: "خطأ", description: "لم يتم العثور على الطلب المراد تحديثه.", variant: "destructive" });
+            setIsLoading(false);
+            return;
+        }
+        const existingOrderData = existingOrderDataResult[0];
+        orderStatusForNewOrder = existingOrderData.status as OrderStatus; // Keep current status or update if needed
+
         await db.execute(
           "UPDATE orders SET type = $1, customer_name = $2, delivery_address = $3, notes = $4, subtotal = $5, discount_percentage = $6, discount_amount = $7, vat_percentage = $8, vat_amount = $9, total_amount = $10, updated_at = $11, table_id = $12 WHERE id = $13",
           [
@@ -425,7 +438,8 @@ export default function POSPage() {
         );
         await db.execute("DELETE FROM order_items WHERE order_id = $1", [currentOrderId]);
         for (const item of currentOrder) {
-          const itemCost = dbMenuItems.find(mi => mi.id === item.id)?.cost;
+          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+          const itemCost = itemCostResult.length > 0 ? Number(itemCostResult[0].cost) || 0 : 0;
           await db.execute(
             "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             [`oi-${Date.now()}-${item.id}`, currentOrderId, item.id, item.name, item.quantity, item.price, itemCost, item.notes || null]
@@ -433,13 +447,13 @@ export default function POSPage() {
         }
         orderToConfirmForInvoice = { 
             id: currentOrderId, 
-            orderNumber: (await db.select<any[]>("SELECT order_number FROM orders WHERE id = $1", [currentOrderId]))[0].order_number, 
+            orderNumber: existingOrderData.order_number, 
             items: currentOrder, 
             totalAmount: finalTotal, 
             subtotal, discountAmount, discountPercentage: isDiscountEnabled ? discountPercentage : undefined, 
             vatAmount, vatPercentage: isVatEnabled ? vatPercentage : undefined,
-            status: (await db.select<any[]>("SELECT status FROM orders WHERE id = $1", [currentOrderId]))[0].status, 
-            type: orderType as OrderType, createdAt: parseISO((await db.select<any[]>("SELECT created_at FROM orders WHERE id = $1", [currentOrderId]))[0].created_at), 
+            status: orderStatusForNewOrder, 
+            type: orderType as OrderType, createdAt: parseISO(existingOrderData.created_at), 
             notes: generalOrderNotes.trim() || undefined, 
             customerName: customerName.trim() || undefined, 
             deliveryAddress: deliveryAddress.trim() || undefined, 
@@ -454,12 +468,13 @@ export default function POSPage() {
           [
             newOrderIdValue, newOrderNumber, orderType, customerName.trim() || null, deliveryAddress.trim() || null, generalOrderNotes.trim() || null,
             subtotal, isDiscountEnabled ? discountPercentage : null, isDiscountEnabled ? discountAmount : null,
-            isVatEnabled ? vatPercentage : null, isVatEnabled ? vatAmount : null, finalTotal, 'قيد الانتظار', now, now,
+            isVatEnabled ? vatPercentage : null, isVatEnabled ? vatAmount : null, finalTotal, orderStatusForNewOrder, now, now,
             orderType === 'صالة' ? tableId : null
           ]
         );
         for (const item of currentOrder) {
-          const itemCost = dbMenuItems.find(mi => mi.id === item.id)?.cost;
+          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+          const itemCost = itemCostResult.length > 0 ? Number(itemCostResult[0].cost) || 0 : 0;
           await db.execute(
             "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             [`oi-${Date.now()}-${item.id}`, newOrderIdValue, item.id, item.name, item.quantity, item.price, itemCost, item.notes || null]
@@ -472,7 +487,7 @@ export default function POSPage() {
             id: newOrderIdValue, orderNumber: newOrderNumber, items: currentOrder, totalAmount: finalTotal, 
             subtotal, discountAmount, discountPercentage: isDiscountEnabled ? discountPercentage : undefined, 
             vatAmount, vatPercentage: isVatEnabled ? vatPercentage : undefined,
-            status: 'قيد الانتظار', type: orderType as OrderType, createdAt: new Date(), notes: generalOrderNotes.trim() || undefined,
+            status: orderStatusForNewOrder, type: orderType as OrderType, createdAt: new Date(), notes: generalOrderNotes.trim() || undefined,
             customerName: customerName.trim() || undefined, deliveryAddress: deliveryAddress.trim() || undefined,
             tableNumber: orderType === 'صالة' ? tableNumber : undefined
         };
@@ -482,7 +497,7 @@ export default function POSPage() {
       setIsInvoiceDialogOpen(true);
 
     } catch (error) {
-      console.error("Error placing order:", error);
+      console.error("Error placing/updating order:", error);
       toast({ title: "خطأ", description: "فشل إرسال/تحديث الطلب.", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -532,8 +547,8 @@ export default function POSPage() {
   }, []);
 
   const getPageTitle = () => {
-    if (currentOrderId && orderType === 'صالة' && tableNumber) {
-      return currentLabels.posTitleTable(tableNumber);
+    if (currentOrderId && currentOrderNumber) {
+      return `تعديل الطلب: ${currentOrderNumber}`;
     }
     if (!currentOrderId && orderType === 'صالة' && tableNumber) {
       return currentLabels.posTitleTable(tableNumber);
@@ -542,8 +557,8 @@ export default function POSPage() {
   };
 
   const getPageDescription = () => {
-    if (currentOrderId && orderType ==='صالة' && tableNumber) {
-      return currentLabels.posDescTable(tableNumber);
+     if (currentOrderId && currentOrderNumber) {
+      return `تعديل تفاصيل الطلب رقم ${currentOrderNumber}.`;
     }
     if (!currentOrderId && orderType === 'صالة' && tableNumber) {
       return currentLabels.posDescTable(tableNumber);
@@ -551,7 +566,7 @@ export default function POSPage() {
     return currentLabels.posDescGeneral;
   };
 
-  if (isLoading && !db) { // Initial DB connection loading
+  if (isLoading && !db) { 
     return (
       <>
         <PageHeader title="نقطة البيع" description="جارٍ الاتصال بقاعدة البيانات..." icon={ShoppingCart} />
@@ -559,7 +574,7 @@ export default function POSPage() {
       </>
     );
   }
-  if (isLoading) { // Data loading after DB connection
+  if (isLoading) { 
     return (
       <>
         <PageHeader title={getPageTitle()} description={getPageDescription()} icon={ShoppingCart} />
@@ -573,10 +588,9 @@ export default function POSPage() {
       <PageHeader 
         title={getPageTitle()}
         description={getPageDescription()}
-        icon={(currentOrderId && orderType ==='صالة' && tableNumber) || (!currentOrderId && orderType === 'صالة' && tableNumber) ? TableIcon : ShoppingCart}
+        icon={(currentOrderId || (orderType === 'صالة' && tableNumber)) ? TableIcon : ShoppingCart}
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
-        {/* Menu Items Section */}
         <div className="lg:col-span-2 flex flex-col h-full bg-card p-4 rounded-lg shadow-md">
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
             <div className="relative flex-grow">
@@ -624,12 +638,11 @@ export default function POSPage() {
           </ScrollArea>
         </div>
 
-        {/* Current Order Section */}
         <Card className="flex flex-col h-full shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShoppingCart className="h-6 w-6 text-primary" />
-              {currentOrderId ? `تعديل الطلب: ${(async () => db && (await db.select<any[]>("SELECT order_number FROM orders WHERE id = $1", [currentOrderId]))[0]?.order_number || currentOrderId)()}` : 'الطلب الحالي'}
+              {currentOrderId && currentOrderNumber ? `تعديل الطلب: ${currentOrderNumber}` : 'الطلب الحالي'}
             </CardTitle>
           </CardHeader>
           <ScrollArea className="flex-grow">
@@ -640,7 +653,7 @@ export default function POSPage() {
                 <ul className="space-y-3 p-3">
                   {currentOrder.map((item) => ( 
                     <li key={`${item.id}-${item.notes || 'no-notes'}`} className="flex items-start gap-3 p-3 bg-secondary/50 rounded-md">
-                      <NextImage src={item.imageUrl} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
+                      <NextImage src={item.imageUrl || 'https://placehold.co/40x40.png'} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
                       <div className="flex-grow">
                         <p className="font-medium text-sm">{item.name}</p>
                         <p className="text-xs text-muted-foreground">${item.price.toFixed(2)}</p>
@@ -700,9 +713,9 @@ export default function POSPage() {
                  <Select 
                     value={orderType} 
                     onValueChange={(value) => handleOrderTypeChange(value as OrderType | '')}
-                    disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)} 
+                    disabled={!!(currentOrderId && orderType === 'صالة')} 
                   >
-                    <SelectTrigger id="orderTypeSelect" disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)}>
+                    <SelectTrigger id="orderTypeSelect" disabled={!!(currentOrderId && orderType === 'صالة')}>
                         <SelectValue placeholder="اختر نوع الطلب" />
                     </SelectTrigger>
                     <SelectContent>
@@ -716,15 +729,15 @@ export default function POSPage() {
               {orderType === 'صالة' && (
                 <div>
                   <Label htmlFor="tableNumber">رقم الطاولة</Label>
-                  {(currentOrderId && orderType === 'صالة' && tableNumber) ? ( 
+                  {(currentOrderId && tableNumber) ? ( 
                      <Input id="tableNumberInput" value={tableNumber} className="mt-1" disabled />
                   ) : (
                     <Select 
                         value={tableNumber} 
                         onValueChange={handleTableSelectionChange}
-                        disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber)} 
+                        disabled={!!(currentOrderId && tableNumber)} 
                     >
-                      <SelectTrigger id="tableNumberSelect" className="mt-1" disabled={!!(currentOrderId && orderType === 'صالة' && tableNumber) || (currentOrderId && !tableNumber) }>
+                      <SelectTrigger id="tableNumberSelect" className="mt-1" disabled={!!(currentOrderId && tableNumber)}>
                         <SelectValue placeholder={availableTablesForSelection.length > 0 ? "اختر طاولة" : "لا توجد طاولات متاحة"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -821,9 +834,9 @@ export default function POSPage() {
                 <Button 
                     onClick={handlePlaceOrder} 
                     className="bg-primary hover:bg-primary/90 text-primary-foreground" 
-                    disabled={currentOrder.length === 0 || (orderType === 'صالة' && !tableId && !currentOrderId)}
+                    disabled={isLoading || currentOrder.length === 0 || (orderType === 'صالة' && !tableId && !currentOrderId)}
                 >
-                  {currentOrderId ? 'تحديث الطلب' : 'إرسال الطلب'}
+                  {isLoading ? 'جارٍ المعالجة...' : (currentOrderId ? 'تحديث الطلب' : 'إرسال الطلب')}
                 </Button>
               </div>
             </CardFooter>
@@ -857,7 +870,7 @@ export default function POSPage() {
                 <ul className="space-y-2 invoice-items-list">
                   {confirmedOrderForInvoice.items.map((item, idx) => (
                     <li key={`${item.id}-${item.notes || 'no-notes'}-${idx}`} className="item-row">
-                      <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover no-print" data-ai-hint={item.dataAiHint || "food item"}/>
+                      <NextImage src={item.imageUrl || 'https://placehold.co/50x50.png'} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover no-print" data-ai-hint={item.dataAiHint || "food item"}/>
                       <div className="item-details">
                         <p className="item-name-print">{item.name}</p>
                         <p className="item-meta-print">{currentLabels.quantity}: {item.quantity} &nbsp;|&nbsp; ${item.price.toFixed(2)} {currentLabels.pricePerItem}</p>
@@ -938,4 +951,3 @@ export default function POSPage() {
     </>
   );
 }
-
