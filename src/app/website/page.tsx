@@ -1,16 +1,80 @@
 
+"use client"; // Required for useEffect and useState
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import NextImage from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Utensils, Coffee, Cake, ScanLine, UserPlus, Leaf, Sofa, Zap, Smartphone, Star, MessageSquare } from 'lucide-react';
+import { Utensils, Coffee, Cake, ScanLine, Leaf, Sofa, Zap, Smartphone, Star, MessageSquare } from 'lucide-react';
+import type { MenuItem, Review } from '@/constants'; // Assuming Review interface is defined
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
+
+// Simplified interfaces for this page, ensure they match your actual DB structure/constants
+interface FetchedMenuItem extends MenuItem {
+  // Ensure all properties from MenuItem are here if needed
+}
+
+interface FetchedReview extends Review {
+  // Ensure all properties from Review are here
+  // Add avatarFallback if you derive it dynamically or store it
+  avatarFallback?: string; 
+}
+
 
 export default function WebsiteLandingPage() {
-  const featuredItems = [
-    { id: 'feat1', name: 'برجر لحم فاخر', description: 'مكونات طازجة ولحم عالي الجودة.', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'gourmet burger', icon: Utensils },
-    { id: 'feat2', name: 'قهوة أرابيكا مميزة', description: 'محمصة بعناية لنكهة لا تُنسى.', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'specialty coffee', icon: Coffee },
-    { id: 'feat3', name: 'تشيز كيك فراولة', description: 'مزيج مثالي من الحلاوة والانتعاش.', imageUrl: 'https://placehold.co/600x400.png', dataAiHint: 'strawberry cheesecake', icon: Cake },
-  ];
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  const [featuredItems, setFeaturedItems] = useState<FetchedMenuItem[]>([]);
+  const [testimonials, setTestimonials] = useState<FetchedReview[]>([]);
+  
+  useEffect(() => {
+    async function initializeAndLoadData() {
+      setIsLoading(true);
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch Featured Items (e.g., first 3 available items)
+        const menuItemsData: any[] = await dbInstance.select(
+          "SELECT id, name, category, price, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items WHERE is_available = TRUE ORDER BY created_at DESC LIMIT 3"
+        );
+        setFeaturedItems(menuItemsData.map(item => ({
+            ...item, 
+            price: Number(item.price),
+            icon: item.category === 'مأكولات' ? Utensils : item.category === 'مشروبات' ? Coffee : Cake // Simplified icon logic
+        })));
+
+        // Fetch Testimonials (e.g., first 3 public reviews)
+        const reviewsData: any[] = await dbInstance.select(
+          "SELECT id, customer_name as customerName, rating, comment, review_date as reviewDate FROM reviews WHERE is_public = TRUE ORDER BY review_date DESC LIMIT 3"
+        );
+        setTestimonials(reviewsData.map(review => ({
+            ...review,
+            rating: Number(review.rating),
+            reviewDate: new Date(review.reviewDate), // Ensure date is parsed
+            // Create a simple avatar fallback from the customer name
+            avatarFallback: review.customerName ? review.customerName.substring(0, 2).toUpperCase() : '??'
+        })));
+
+      } catch (error) {
+        console.error("Error loading data for landing page:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات الصفحة الرئيسية.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    initializeAndLoadData();
+  }, [toast]); // db instance is not added to dependency to avoid re-fetch on every db re-init if that happens.
 
   const whyChooseUsItems = [
     { icon: Leaf, title: "مكونات طازجة", description: "نستخدم أجود المكونات الطازجة يوميًا لضمان أفضل مذاق." },
@@ -19,12 +83,14 @@ export default function WebsiteLandingPage() {
     { icon: Smartphone, title: "طلب سهل عبر الإنترنت", description: "اطلب من طاولتك مباشرة أو للاستلام عبر موقعنا." },
   ];
 
-  const testimonials = [
-    { id: 'test1', name: 'أحمد خالد', quote: "القهوة هنا لا تُعلى عليها! والمكان رائع للاسترخاء.", avatarFallback: "أخ", rating: 5 },
-    { id: 'test2', name: 'سارة عبدالله', quote: "أحببت البرجر، كان طازجًا ولذيذًا جدًا. سأعود بالتأكيد!", avatarFallback: "سع", rating: 5 },
-    { id: 'test3', name: 'عمر محمد', quote: "خدمة ممتازة وأسعار معقولة. الحلويات كانت خرافية.", avatarFallback: "عم", rating: 4 },
-  ];
-
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-14rem)] text-center">
+        <Coffee className="h-20 w-20 text-primary animate-pulse mb-4" />
+        <p className="text-xl text-muted-foreground">جارٍ تحميل بيانات الكافيه...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -64,38 +130,40 @@ export default function WebsiteLandingPage() {
       </section>
 
       {/* Featured Items Section */}
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">
-            أطباقنا المميزة
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featuredItems.map((item) => (
-              <Card key={item.id} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out transform hover:-translate-y-2 group">
-                <div className="overflow-hidden">
-                  <NextImage
-                    src={item.imageUrl}
-                    alt={item.name}
-                    width={600}
-                    height={400}
-                    className="w-full h-56 object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
-                    data-ai-hint={item.dataAiHint}
-                  />
-                </div>
-                <CardHeader className="pb-2 pt-4">
-                  <div className="flex items-center mb-1">
-                    <item.icon className="h-6 w-6 text-primary me-2 rtl:ms-2 rtl:me-0" />
-                    <CardTitle className="text-xl">{item.name}</CardTitle>
+      {featuredItems.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold text-center text-foreground mb-12">
+              أطباقنا المميزة
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredItems.map((item) => (
+                <Card key={item.id} className="overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 ease-in-out transform hover:-translate-y-2 group">
+                  <div className="overflow-hidden">
+                    <NextImage
+                      src={item.imageUrl || 'https://placehold.co/600x400.png'}
+                      alt={item.name}
+                      width={600}
+                      height={400}
+                      className="w-full h-56 object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
+                      data-ai-hint={item.dataAiHint || "food item"}
+                    />
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>{item.description}</CardDescription>
-                </CardContent>
-              </Card>
-            ))}
+                  <CardHeader className="pb-2 pt-4">
+                    <div className="flex items-center mb-1">
+                      {item.icon && <item.icon className="h-6 w-6 text-primary me-2 rtl:ms-2 rtl:me-0" />}
+                      <CardTitle className="text-xl">{item.name}</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription>{item.description || item.category}</CardDescription>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Why Choose Us Section */}
       <section className="py-16 bg-secondary/20">
@@ -116,35 +184,37 @@ export default function WebsiteLandingPage() {
       </section>
 
       {/* Testimonials Section */}
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center text-foreground mb-12">قالوا عنا</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial) => (
-              <Card key={testimonial.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <CardContent className="pt-6">
-                  <div className="flex items-center mb-4">
-                    <div className="relative inline-flex shrink-0 items-center justify-center text-sm font-medium uppercase rounded-full size-12 bg-muted text-muted-foreground me-3 rtl:ms-3 rtl:me-0">
-                      {testimonial.avatarFallback}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground">{testimonial.name}</p>
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className={`h-4 w-4 ${i < testimonial.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-                        ))}
+      {testimonials.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold text-center text-foreground mb-12">قالوا عنا</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {testimonials.map((testimonial) => (
+                <Card key={testimonial.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center mb-4">
+                      <div className="relative inline-flex shrink-0 items-center justify-center text-sm font-medium uppercase rounded-full size-12 bg-muted text-muted-foreground me-3 rtl:ms-3 rtl:me-0">
+                        {testimonial.avatarFallback}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{testimonial.customerName}</p>
+                        <div className="flex">
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} className={`h-4 w-4 ${i < testimonial.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <blockquote className="text-muted-foreground italic border-s-4 border-primary ps-4 py-2"> {/* Changed border-l to border-s and pl to ps */}
-                    "{testimonial.quote}"
-                  </blockquote>
-                </CardContent>
-              </Card>
-            ))}
+                    <blockquote className="text-muted-foreground italic border-s-4 border-primary ps-4 py-2">
+                      "{testimonial.comment || 'تجربة رائعة!'}"
+                    </blockquote>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Call to Action / About Us Snippet */}
       <section className="py-20 bg-primary/10">
