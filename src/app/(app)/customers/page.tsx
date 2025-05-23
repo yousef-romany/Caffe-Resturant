@@ -25,12 +25,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { DUMMY_CUSTOMERS, type Customer } from '@/constants';
+import type { Customer } from '@/constants';
 import { PlusCircle, Edit, Trash2, Award } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
 const initialNewCustomerState: Omit<Customer, 'id' | 'joinDate' | 'totalSpent'> & { joinDate: string } = {
   name: '',
@@ -42,16 +44,55 @@ const initialNewCustomerState: Omit<Customer, 'id' | 'joinDate' | 'totalSpent'> 
 };
 
 export default function CustomersPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [newCustomerData, setNewCustomerData] = useState(initialNewCustomerState);
   const { toast } = useToast();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setCustomers(DUMMY_CUSTOMERS);
-  }, []);
+    async function loadDbAndFetchData() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        await fetchCustomers(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات العملاء.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDbAndFetchData();
+  }, [toast]);
+
+  const fetchCustomers = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const fetchedCustomers: any[] = await currentDb.select('SELECT id, name, phone, email, loyalty_points as loyaltyPoints, join_date as joinDate, total_spent as totalSpent, notes FROM customers ORDER BY name');
+      setCustomers(fetchedCustomers.map(cust => ({
+        ...cust,
+        joinDate: cust.joinDate ? parseISO(cust.joinDate) : new Date(),
+        loyaltyPoints: Number(cust.loyaltyPoints) || 0,
+        totalSpent: Number(cust.totalSpent) || 0,
+      })));
+    } catch (error) {
+      console.error("Error fetching customers:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات العملاء.", variant: "destructive" });
+      setCustomers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -59,40 +100,48 @@ export default function CustomersPage() {
     setNewCustomerData(prev => ({ ...prev, [name]: name === 'loyaltyPoints' && (value === '' || isNaN(Number(numValue))) ? 0 : numValue }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
     if (!newCustomerData.name || !newCustomerData.phone || !newCustomerData.joinDate) {
       toast({ title: "خطأ", description: "الاسم، الهاتف، وتاريخ الانضمام مطلوبون.", variant: "destructive" });
       return;
     }
 
-    const customerDataToSave: Omit<Customer, 'id' | 'totalSpent'> = {
-      ...newCustomerData,
-      loyaltyPoints: Number(newCustomerData.loyaltyPoints),
-      joinDate: new Date(newCustomerData.joinDate),
-      notes: newCustomerData.notes || undefined,
+    const customerDataToSave = {
+      name: newCustomerData.name,
+      phone: newCustomerData.phone,
+      email: newCustomerData.email || null,
+      loyaltyPoints: Number(newCustomerData.loyaltyPoints) || 0,
+      join_date: format(new Date(newCustomerData.joinDate), 'yyyy-MM-dd'),
+      notes: newCustomerData.notes || null,
     };
 
-    if (editingCustomer) {
-      const updatedCustomer = { ...editingCustomer, ...customerDataToSave };
-      setCustomers(customers.map(cust => cust.id === editingCustomer.id ? updatedCustomer : cust));
-      const indexToUpdate = DUMMY_CUSTOMERS.findIndex(c => c.id === editingCustomer.id);
-      if (indexToUpdate !== -1) {
-        DUMMY_CUSTOMERS[indexToUpdate] = updatedCustomer;
+    try {
+      if (editingCustomer) {
+        await db.execute(
+          'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4, join_date = $5, notes = $6 WHERE id = $7',
+          [customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyaltyPoints, customerDataToSave.join_date, customerDataToSave.notes, editingCustomer.id]
+        );
+        toast({ title: "نجاح", description: `تم تحديث بيانات العميل ${customerDataToSave.name}.` });
+      } else {
+        const newCustomerId = `cust-${Date.now()}`;
+        await db.execute(
+          'INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, notes, total_spent) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)',
+          [newCustomerId, customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyaltyPoints, customerDataToSave.join_date, customerDataToSave.notes]
+        );
+        toast({ title: "نجاح", description: `تمت إضافة العميل ${customerDataToSave.name}.` });
       }
-      toast({ title: "نجاح", description: `تم تحديث بيانات العميل ${updatedCustomer.name}.` });
-    } else {
-      const newCustomerWithId: Customer = {
-        ...customerDataToSave,
-        id: `cust-${Date.now()}`,
-        totalSpent: 0, // New customers start with 0 spent
-      };
-      setCustomers([newCustomerWithId, ...customers]);
-      DUMMY_CUSTOMERS.unshift(newCustomerWithId);
-      toast({ title: "نجاح", description: `تمت إضافة العميل ${newCustomerWithId.name}.` });
+      setIsDialogOpen(false);
+      setEditingCustomer(null);
+      setNewCustomerData(initialNewCustomerState);
+      await fetchCustomers(db);
+    } catch (error) {
+      console.error("Error submitting customer:", error);
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات العميل.", variant: "destructive" });
     }
-    setIsDialogOpen(false);
-    setEditingCustomer(null);
-    setNewCustomerData(initialNewCustomerState);
   };
 
   const handleEditCustomer = (customer: Customer) => {
@@ -106,13 +155,19 @@ export default function CustomersPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDeleteCustomer = (customerToDelete: Customer) => {
-    setCustomers(customers.filter(cust => cust.id !== customerToDelete.id));
-    const indexToDelete = DUMMY_CUSTOMERS.findIndex(c => c.id === customerToDelete.id);
-    if (indexToDelete !== -1) {
-        DUMMY_CUSTOMERS.splice(indexToDelete, 1);
+  const handleDeleteCustomer = async (customerToDelete: Customer) => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
     }
-    toast({ title: "نجاح", description: `تم حذف العميل ${customerToDelete.name}.`, variant: "destructive" });
+    try {
+      await db.execute('DELETE FROM customers WHERE id = $1', [customerToDelete.id]);
+      toast({ title: "نجاح", description: `تم حذف العميل ${customerToDelete.name}.`, variant: "destructive" });
+      await fetchCustomers(db);
+    } catch (error) {
+      console.error("Error deleting customer:", error);
+      toast({ title: "خطأ في الحذف", description: "فشل حذف العميل.", variant: "destructive" });
+    }
   };
 
   const openNewCustomerDialog = () => {
@@ -141,55 +196,59 @@ export default function CustomersPage() {
       
       <Card className="shadow-lg">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>الاسم</TableHead>
-                <TableHead>الهاتف</TableHead>
-                <TableHead>البريد الإلكتروني</TableHead>
-                <TableHead className="text-center">نقاط الولاء</TableHead>
-                <TableHead className="text-center">إجمالي الإنفاق ($)</TableHead>
-                <TableHead>تاريخ الانضمام</TableHead>
-                <TableHead className="text-center">الإجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customers.length > 0 ? (
-                customers.map(customer => (
-                  <TableRow key={customer.id}>
-                    <TableCell className="font-medium">
-                      <Button 
-                        variant="link" 
-                        onClick={() => handleViewCustomerDetails(customer.id)}
-                        className="text-primary hover:underline p-0 h-auto"
-                      >
-                        {customer.name}
-                      </Button>
-                    </TableCell>
-                    <TableCell>{customer.phone}</TableCell>
-                    <TableCell>{customer.email || '-'}</TableCell>
-                    <TableCell className="text-center">{customer.loyaltyPoints}</TableCell>
-                    <TableCell className="text-center">${(customer.totalSpent || 0).toFixed(2)}</TableCell>
-                    <TableCell>{format(new Date(customer.joinDate), 'PP', { locale: arSA })}</TableCell>
-                    <TableCell className="text-center space-x-2 space-x-reverse">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditCustomer(customer)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomer(customer)} className="text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+           {isLoading ? (
+            <p className="text-center text-muted-foreground p-10">جارٍ تحميل بيانات العملاء...</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>الاسم</TableHead>
+                  <TableHead>الهاتف</TableHead>
+                  <TableHead>البريد الإلكتروني</TableHead>
+                  <TableHead className="text-center">نقاط الولاء</TableHead>
+                  <TableHead className="text-center">إجمالي الإنفاق ($)</TableHead>
+                  <TableHead>تاريخ الانضمام</TableHead>
+                  <TableHead className="text-center">الإجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {customers.length > 0 ? (
+                  customers.map(customer => (
+                    <TableRow key={customer.id}>
+                      <TableCell className="font-medium">
+                        <Button 
+                          variant="link" 
+                          onClick={() => handleViewCustomerDetails(customer.id)}
+                          className="text-primary hover:underline p-0 h-auto"
+                        >
+                          {customer.name}
+                        </Button>
+                      </TableCell>
+                      <TableCell>{customer.phone}</TableCell>
+                      <TableCell>{customer.email || '-'}</TableCell>
+                      <TableCell className="text-center">{customer.loyaltyPoints}</TableCell>
+                      <TableCell className="text-center">${(customer.totalSpent || 0).toFixed(2)}</TableCell>
+                      <TableCell>{format(new Date(customer.joinDate), 'PP', { locale: arSA })}</TableCell>
+                      <TableCell className="text-center space-x-2 space-x-reverse">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditCustomer(customer)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteCustomer(customer)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      لا يوجد عملاء مسجلون بعد.
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
-                    لا يوجد عملاء مسجلون بعد.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -240,5 +299,6 @@ export default function CustomersPage() {
     </>
   );
 }
+    
 
     

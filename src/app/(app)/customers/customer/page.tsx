@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,11 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { DUMMY_CUSTOMERS, DUMMY_ORDERS, type Customer, type Order, type OrderStatus } from '@/constants';
-import { User, ShoppingBag, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react'; // Added ArrowRight
+import { type Customer, type Order, type OrderStatus } from '@/constants'; // Keep type imports for structure
+import { User, ShoppingBag, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
 const getStatusBadgeVariant = (status: OrderStatus) => {
   switch (status) {
@@ -29,6 +32,8 @@ const getStatusBadgeVariant = (status: OrderStatus) => {
 
 export default function CustomerDetailPage() {
   const router = useRouter();
+  const { toast } = useToast();
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -41,38 +46,85 @@ export default function CustomerDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const idFromStorage = localStorage.getItem('selectedCustomerId');
-    if (idFromStorage) {
-      setCustomerId(idFromStorage);
-      // Important: Clear from localStorage after reading to prevent stale state on refresh/direct nav
-      // localStorage.removeItem('selectedCustomerId'); // Do this after data fetching
-    } else {
-      setIsLoading(false);
-      // Optionally, redirect if no ID is found and this page requires one
-      // router.replace('/customers'); 
+    async function initializePage() {
+      const idFromStorage = localStorage.getItem('selectedCustomerId');
+      if (idFromStorage) {
+        setCustomerId(idFromStorage);
+        // Clear from localStorage after data fetching attempt (moved to inner useEffect)
+      } else {
+        setIsLoading(false);
+        toast({ title: "لم يتم تحديد عميل", description: "الرجاء اختيار عميل من القائمة.", variant: "destructive"});
+        router.replace('/customers'); 
+      }
+      
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+        setIsLoading(false);
+      }
     }
-  }, [router]);
+    initializePage();
+  }, [router, toast]);
 
   useEffect(() => {
-    if (customerId) {
-      const foundCustomer = DUMMY_CUSTOMERS.find(c => c.id === customerId);
-      if (foundCustomer) {
-        setCustomer(foundCustomer);
-        const customerOrders = DUMMY_ORDERS.filter(order => order.customerName === foundCustomer.name)
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setOrders(customerOrders);
-      } else {
-        // Customer not found with the ID from localStorage
-        setCustomer(null); 
-        setOrders([]);
+    async function fetchCustomerAndOrders() {
+      if (db && customerId) {
+        setIsLoading(true);
+        try {
+          const foundCustomerResult: any[] = await db.select('SELECT id, name, phone, email, loyalty_points as loyaltyPoints, join_date as joinDate, total_spent as totalSpent, notes FROM customers WHERE id = $1', [customerId]);
+          
+          if (foundCustomerResult.length > 0) {
+            const custData = foundCustomerResult[0];
+            setCustomer({
+              ...custData,
+              joinDate: custData.joinDate ? parseISO(custData.joinDate) : new Date(),
+              loyaltyPoints: Number(custData.loyaltyPoints) || 0,
+              totalSpent: Number(custData.totalSpent) || 0,
+            });
+
+            // Fetch orders related to this customer by customer_id
+            // Note: The SQL schema links orders to customers via customer_id, not customerName.
+            // Adjust this query if your dummy data or actual schema is different.
+            const customerOrdersResult: any[] = await db.select(
+              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, type, created_at as createdAt FROM orders WHERE customer_id = $1 ORDER BY created_at DESC',
+              [customerId]
+            );
+            setOrders(customerOrdersResult.map(order => ({
+              ...order,
+              createdAt: order.createdAt ? parseISO(order.createdAt) : new Date(),
+              totalAmount: Number(order.totalAmount) || 0,
+              // items would need another query or join if they were to be displayed here from DB
+              items: [], // Placeholder, as order_items are not fetched here
+            })));
+
+          } else {
+            setCustomer(null); 
+            setOrders([]);
+            toast({ title: "لم يتم العثور على العميل", description: `العميل بالمعرف ${customerId} غير موجود.`, variant: "destructive"});
+          }
+        } catch (error) {
+          console.error("Error fetching customer details or orders:", error);
+          toast({ title: "خطأ", description: "فشل في جلب تفاصيل العميل أو طلباته.", variant: "destructive" });
+          setCustomer(null);
+          setOrders([]);
+        } finally {
+          setIsLoading(false);
+          localStorage.removeItem('selectedCustomerId'); // Clear after fetching
+        }
+      } else if (!customerId && !isLoading) { // Handle case where customerId was not set from localStorage
+        setIsLoading(false);
       }
-      setIsLoading(false);
-      // Clear from localStorage after data fetching attempt
-      localStorage.removeItem('selectedCustomerId');
-    } else {
-      setIsLoading(false);
     }
-  }, [customerId]);
+    fetchCustomerAndOrders();
+  }, [db, customerId, toast, isLoading]); // Added isLoading to dependencies
 
   const availableYears = useMemo(() => {
     const years = new Set(orders.map(order => getYear(new Date(order.createdAt)).toString()));
@@ -220,7 +272,7 @@ export default function CustomerDetailPage() {
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{format(new Date(order.createdAt), 'PPpp', { locale: arSA })}</TableCell>
                     <TableCell>{order.type}</TableCell>
-                    <TableCell>${order.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell>${Number(order.totalAmount).toFixed(2)}</TableCell> {/* Ensure totalAmount is treated as number */}
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(order.status)}>{order.status}</Badge>
                     </TableCell>
@@ -240,5 +292,7 @@ export default function CustomerDetailPage() {
     </>
   );
 }
+
+    
 
     
