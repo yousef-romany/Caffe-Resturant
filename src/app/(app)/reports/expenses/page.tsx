@@ -4,13 +4,16 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_EMPLOYEES, DUMMY_PURCHASE_ORDERS, type PurchaseOrder } from '@/constants';
+import { DUMMY_EMPLOYEES } from '@/constants'; // Keep for salary estimation for now
 import { Users, Package, TrendingDown, CalendarDays } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
-type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
 
 const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
   const now = new Date();
@@ -33,6 +36,10 @@ const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: D
 };
 
 export default function ExpensesReportPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+
   const [totalSalariesPaid, setTotalSalariesPaid] = useState(0);
   const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
@@ -41,26 +48,55 @@ export default function ExpensesReportPage() {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    async function initDb() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB for expenses report:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+      }
+    }
+    initDb();
+  }, [toast]);
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || !db) {
+      setIsLoading(db === null);
+      return;
+    }
+    
+    async function fetchExpensesData() {
+      setIsLoading(true);
+      const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+      const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss');
+      const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
 
-    // Calculate total salaries (snapshot of current employees for simplicity with dummy data)
-    const salaries = DUMMY_EMPLOYEES.reduce((sum, emp) => sum + (emp.salary || 0), 0);
-    setTotalSalariesPaid(salaries); 
+      try {
+        // Calculate total salaries (snapshot of current active employees)
+        const employeesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
+        const salaries = Number(employeesResult[0]?.totalSalaries) || 0;
+        setTotalSalariesPaid(salaries); 
 
-    // Calculate purchase amount for the selected period
-    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
-    const filteredPurchaseOrders = DUMMY_PURCHASE_ORDERS.filter(po => {
-        const orderDate = new Date(po.orderDate);
-        return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate;
-    });
-    const poAmount = filteredPurchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0);
-    setTotalPurchaseAmount(poAmount);
+        // Calculate purchase amount for the selected period
+        const purchaseOrdersResult: any[] = await db.select(
+            "SELECT SUM(total_amount) as totalPurchase FROM purchase_orders WHERE order_date BETWEEN ? AND ?",
+            [format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')] // Assuming order_date is DATE type
+        );
+        const poAmount = Number(purchaseOrdersResult[0]?.totalPurchase) || 0;
+        setTotalPurchaseAmount(poAmount);
 
-    setTotalExpenses(salaries + poAmount);
-  }, [selectedPeriod, isClient]);
+        setTotalExpenses(salaries + poAmount);
+      } catch (error) {
+        console.error("Error fetching expenses data:", error);
+        toast({ title: "خطأ", description: "فشل في جلب بيانات المصروفات.", variant: "destructive" });
+        setTotalSalariesPaid(0); setTotalPurchaseAmount(0); setTotalExpenses(0);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchExpensesData();
+  }, [selectedPeriod, isClient, db, toast]);
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
@@ -78,11 +114,11 @@ export default function ExpensesReportPage() {
     }
   };
   
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
       <>
-        <PageHeader title="تقرير المصروفات" description="تحليل المصروفات المختلفة." icon={TrendingDown}/>
-        <p className="text-center text-muted-foreground py-10">جارٍ تحميل التقرير...</p>
+        <PageHeader title="تقرير المصروفات" description="جارٍ تحميل بيانات التقرير..." icon={TrendingDown}/>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
@@ -107,7 +143,6 @@ export default function ExpensesReportPage() {
                 <SelectItem value="quarterly">ربع سنوي</SelectItem>
                 <SelectItem value="semi_annually">نصف سنوي (آخر 6 أشهر)</SelectItem>
                 <SelectItem value="annually">سنوي</SelectItem>
-                {/* <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem> */}
               </SelectContent>
             </Select>
           </div>
@@ -126,7 +161,7 @@ export default function ExpensesReportPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalSalariesPaid.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">إجمالي الرواتب المدفوعة (تقديري حالي)</p>
+                <p className="text-xs text-muted-foreground">إجمالي رواتب الموظفين النشطين حاليًا</p>
             </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -151,8 +186,8 @@ export default function ExpensesReportPage() {
             </Card>
         </CardContent>
       </Card>
-      {/* Further detailed expense breakdown charts/tables can be added here */}
     </>
   );
 }
 
+    

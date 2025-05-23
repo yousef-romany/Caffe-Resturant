@@ -4,15 +4,18 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DUMMY_PURCHASE_ORDERS, type PurchaseOrder } from '@/constants';
+import { type PurchaseOrder } from '@/constants';
 import { ListChecks, ClipboardList, CalendarDays } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
-type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
 
 const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
   const now = new Date();
@@ -35,6 +38,10 @@ const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: D
 };
 
 export default function PurchaseOrdersSummaryReportPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [displayedPurchaseOrders, setDisplayedPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
@@ -43,24 +50,59 @@ export default function PurchaseOrdersSummaryReportPage() {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    async function initDb() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB for PO summary report:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+      }
+    }
+    initDb();
+  }, [toast]);
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || !db) {
+      setIsLoading(db === null);
+      return;
+    }
 
-    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+    async function fetchPurchaseOrdersData() {
+        setIsLoading(true);
+        const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+        const startDateSqlDate = format(startDate, 'yyyy-MM-dd');
+        const endDateSqlDate = format(endDate, 'yyyy-MM-dd');
 
-    const filteredPurchaseOrders = DUMMY_PURCHASE_ORDERS.filter(po => {
-        const orderDate = new Date(po.orderDate);
-        return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate;
-    });
-    
-    setTotalPurchaseOrdersCount(filteredPurchaseOrders.length);
-    setDisplayedPurchaseOrders(filteredPurchaseOrders.sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()).slice(0, 10));
-    const poAmountForPeriod = filteredPurchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0);
-    setTotalPurchaseAmount(poAmountForPeriod);
+        try {
+            const poStatsResult: any[] = await db.select(
+                "SELECT COUNT(*) as count, SUM(total_amount) as totalAmount FROM purchase_orders WHERE order_date BETWEEN ? AND ?",
+                [startDateSqlDate, endDateSqlDate]
+            );
+            setTotalPurchaseOrdersCount(Number(poStatsResult[0]?.count) || 0);
+            setTotalPurchaseAmount(Number(poStatsResult[0]?.totalAmount) || 0);
 
-  }, [selectedPeriod, isClient]);
+            const recentPOsResult: any[] = await db.select(
+                "SELECT id, order_number as orderNumber, supplier_name as supplierName, total_amount as totalAmount, status, order_date as orderDate FROM purchase_orders WHERE order_date BETWEEN ? AND ? ORDER BY order_date DESC LIMIT 10",
+                [startDateSqlDate, endDateSqlDate]
+            );
+            setDisplayedPurchaseOrders(recentPOsResult.map(po => ({
+                ...po,
+                orderDate: parseISO(po.orderDate), // orderDate is DATE type in DB
+                totalAmount: Number(po.totalAmount),
+                items: [], // Items not needed for this summary view
+            })));
+
+        } catch (error) {
+            console.error("Error fetching PO summary data:", error);
+            toast({ title: "خطأ", description: "فشل في جلب بيانات ملخص أوامر الشراء.", variant: "destructive" });
+            setTotalPurchaseOrdersCount(0); setTotalPurchaseAmount(0); setDisplayedPurchaseOrders([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+    fetchPurchaseOrdersData();
+  }, [selectedPeriod, isClient, db, toast]);
 
   const getPurchaseStatusBadgeVariant = (status: PurchaseOrder['status']) => {
     switch (status) {
@@ -88,11 +130,11 @@ export default function PurchaseOrdersSummaryReportPage() {
     }
   };
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
       <>
-        <PageHeader title="ملخص أوامر الشراء" description="نظرة عامة على أوامر الشراء للموردين." icon={ListChecks}/>
-        <p className="text-center text-muted-foreground py-10">جارٍ تحميل التقرير...</p>
+        <PageHeader title="ملخص أوامر الشراء" description="جارٍ تحميل بيانات التقرير..." icon={ListChecks}/>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
@@ -165,7 +207,7 @@ export default function PurchaseOrdersSummaryReportPage() {
                                 <TableCell className="text-center">
                                     <Badge variant={getPurchaseStatusBadgeVariant(po.status)}>{po.status}</Badge>
                                 </TableCell>
-                                <TableCell className="text-left font-semibold">${po.totalAmount.toFixed(2)}</TableCell>
+                                <TableCell className="text-left font-semibold">${Number(po.totalAmount).toFixed(2)}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>

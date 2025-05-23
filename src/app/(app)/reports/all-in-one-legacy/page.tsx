@@ -4,15 +4,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DUMMY_ORDERS, DUMMY_MENU_ITEMS, DUMMY_INGREDIENTS, DUMMY_PURCHASE_ORDERS, DUMMY_EMPLOYEES, type Order, type OrderStatus, type Category, type Ingredient, type PurchaseOrder, type OrderType } from '@/constants';
+import { type Order, type OrderStatus, type Category, type Ingredient, type PurchaseOrder, type OrderType, type Employee } from '@/constants';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { DollarSign, ShoppingBag, Utensils, BarChart3, Package, AlertTriangle, ClipboardList, ListChecks, Users, TrendingUp, TrendingDown, Wallet, Filter, CalendarDays } from 'lucide-react'; // Added icons
+import { DollarSign, ShoppingBag, Utensils, BarChart3, Package, AlertTriangle, ClipboardList, ListChecks, Users, TrendingUp, TrendingDown, Wallet, Filter, CalendarDays } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, isValid, parseISO, subMonths } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
+
 
 // Helper to generate random colors for Pie chart
 const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC', '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF'];
@@ -23,18 +27,42 @@ interface MonthlySalesData {
 }
 
 interface CategorySalesData {
-  name: Category;
+  name: Category | string; // Allow string for flexibility if DB returns string
   value: number;
 }
 
 interface OrderTypeSalesData {
-  name: OrderType;
+  name: OrderType | string; // Allow string
   value: number;
 }
 
-type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
+
+const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
+  const now = new Date();
+  switch (period) {
+    case 'daily':
+      return { startDate: startOfDay(now), endDate: endOfDay(now) };
+    case 'weekly':
+      return { startDate: startOfWeek(now, { locale: arSA }), endDate: endOfWeek(now, { locale: arSA }) };
+    case 'monthly':
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+    case 'quarterly':
+      return { startDate: startOfQuarter(now), endDate: endOfQuarter(now) };
+    case 'semi_annually':
+      return { startDate: startOfMonth(subMonths(now, 5)), endDate: endOfMonth(now) };
+    case 'annually':
+      return { startDate: startOfYear(now), endDate: endOfYear(now) };
+    default:
+      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
+  }
+};
 
 export default function AllInOneLegacyReportsPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+
   const [monthlySales, setMonthlySales] = useState<MonthlySalesData[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySalesData[]>([]);
   const [orderTypeSales, setOrderTypeSales] = useState<OrderTypeSalesData[]>([]);
@@ -49,7 +77,7 @@ export default function AllInOneLegacyReportsPage() {
   const [totalExpenses, setTotalExpenses] = useState(0);
 
   const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); // Placeholder
-  const [netCashFlow, setNetCashFlow] = useState(0); // Placeholder
+  const [netCashFlow, setNetCashFlow] = useState(0);
 
   const [totalIngredients, setTotalIngredients] = useState(0);
   const [lowStockIngredientsCount, setLowStockIngredientsCount] = useState(0);
@@ -59,95 +87,123 @@ export default function AllInOneLegacyReportsPage() {
   const [recentPurchaseOrders, setRecentPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly');
-
-
-  useEffect(() => {
-    // Sales calculations
-    const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
-    const revenue = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-    setTotalRevenue(revenue);
-    setTotalOrders(completedOrders.length);
-    setAverageOrderValue(completedOrders.length > 0 ? revenue / completedOrders.length : 0);
-
-    const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-    const currentMonthIndex = new Date().getMonth();
-    const salesData: MonthlySalesData[] = Array(6).fill(null).map((_, i) => {
-        const monthIndex = (currentMonthIndex - 5 + i + 12) % 12;
-        const monthName = monthsAr[monthIndex];
-        const salesForMonth = DUMMY_ORDERS
-            .filter(o => o.status === 'مكتمل' && new Date(o.createdAt).getMonth() === monthIndex)
-            .reduce((sum, order) => sum + order.totalAmount, 0);
-        return {
-            month: monthName,
-            sales: salesForMonth > 0 ? salesForMonth : Math.floor(Math.random() * 1500) + 500, 
-        };
-    });
-    setMonthlySales(salesData);
-
-    const catSales: { [key in Category]?: number } = {};
-    completedOrders.forEach(order => {
-      order.items.forEach(item => {
-        catSales[item.category] = (catSales[item.category] || 0) + (item.price * item.quantity);
-      });
-    });
-    setCategorySales(
-        (Object.entries(catSales) as [Category, number][])
-        .map(([name, value]) => ({ name, value }))
-        .sort((a,b) => b.value - a.value)
-    );
-    
-    const otSales: { [key in OrderType]?: number } = {};
-    completedOrders.forEach(order => {
-        otSales[order.type] = (otSales[order.type] || 0) + order.totalAmount;
-    });
-    setOrderTypeSales(
-        (Object.entries(otSales) as [OrderType, number][])
-        .map(([name, value]) => ({name, value}))
-        .sort((a,b) => b.value - a.value)
-    );
-
-    const itemSalesCount: { [key: string]: { name: string; sales: number; quantity: number } } = {};
-    completedOrders.forEach(order => {
-        order.items.forEach(orderItem => {
-            if (!itemSalesCount[orderItem.id]) {
-                itemSalesCount[orderItem.id] = { name: orderItem.name, sales: 0, quantity: 0 };
-            }
-            itemSalesCount[orderItem.id].sales += orderItem.price * orderItem.quantity;
-            itemSalesCount[orderItem.id].quantity += orderItem.quantity;
-        });
-    });
-    const sortedTopItems = Object.values(itemSalesCount)
-        .sort((a,b) => b.sales - a.sales)
-        .slice(0,5);
-    setTopItems(sortedTopItems);
-
-    // Expenses Calculations
-    const salaries = DUMMY_EMPLOYEES.reduce((sum, emp) => sum + (emp.salary || 0), 0);
-    setTotalSalariesPaid(salaries); // Assuming monthly salaries for this placeholder
-    const poAmount = DUMMY_PURCHASE_ORDERS.reduce((sum, po) => sum + po.totalAmount, 0);
-    setTotalPurchaseAmount(poAmount);
-    setTotalExpenses(salaries + poAmount);
-    
-    // Financial Placeholder Calculations
-    setNetCashFlow(revenue - (salaries + poAmount)); // Simplified net cash flow
-
-    // Inventory Reports
-    setTotalIngredients(DUMMY_INGREDIENTS.length);
-    const lowStock = DUMMY_INGREDIENTS.filter(ing => ing.lowStockThreshold !== undefined && ing.stockQuantity < ing.lowStockThreshold);
-    setLowStockIngredientsCount(lowStock.length);
-    setLowStockItemsList(lowStock);
-
-    // Purchase Order Reports
-    setTotalPurchaseOrdersCount(DUMMY_PURCHASE_ORDERS.length);
-    setRecentPurchaseOrders(DUMMY_PURCHASE_ORDERS.slice(0, 5).sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()));
-
-  }, [selectedPeriod]); // Re-calculate if period changes, though dummy data won't reflect it accurately
-  
   const [isClient, setIsClient] = useState(false);
+
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    async function initDb() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB for all-in-one report:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+      }
+    }
+    initDb();
+  }, [toast]);
 
+  useEffect(() => {
+    if (!isClient || !db) {
+      setIsLoading(db === null);
+      return;
+    }
+
+    async function fetchAllReportData() {
+      setIsLoading(true);
+      const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+      const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss');
+      const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
+      const startDateSqlDate = format(startDate, 'yyyy-MM-dd');
+      const endDateSqlDate = format(endDate, 'yyyy-MM-dd');
+
+      try {
+        // Sales Summary
+        const summaryResult: any[] = await db.select(
+          "SELECT SUM(total_amount) as totalRevenue, COUNT(*) as totalOrders FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+          [startDateString, endDateString]
+        );
+        const revenue = Number(summaryResult[0]?.totalRevenue) || 0;
+        const ordersCount = Number(summaryResult[0]?.totalOrders) || 0;
+        setTotalRevenue(revenue);
+        setTotalOrders(ordersCount);
+        setAverageOrderValue(ordersCount > 0 ? revenue / ordersCount : 0);
+
+        // Monthly Sales Chart (last 6 months)
+        const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+        const currentMonthDate = new Date();
+        const salesChartDataPromises: Promise<MonthlySalesData>[] = Array(6).fill(null).map(async (_, i) => {
+            const targetMonthDate = subMonths(currentMonthDate, 5 - i);
+            const monthStart = format(startOfMonth(targetMonthDate), 'yyyy-MM-dd HH:mm:ss');
+            const monthEnd = format(endOfMonth(targetMonthDate), 'yyyy-MM-dd HH:mm:ss');
+            const monthIndex = targetMonthDate.getMonth(); const year = targetMonthDate.getFullYear();
+            const monthName = `${monthsAr[monthIndex]} ${year}`;
+            const monthSalesResult: any[] = await db.select("SELECT SUM(total_amount) as sales FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?", [monthStart, monthEnd]);
+            return { month: monthName, sales: Number(monthSalesResult[0]?.sales) || 0 };
+        });
+        setMonthlySales(await Promise.all(salesChartDataPromises));
+
+        // Category Sales
+        const catSalesResult: any[] = await db.select(
+          `SELECT mi.category, SUM(oi.price_at_order * oi.quantity) as value FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE o.status = 'مكتمل' AND o.created_at BETWEEN ? AND ? GROUP BY mi.category ORDER BY value DESC`,
+          [startDateString, endDateString]
+        );
+        setCategorySales(catSalesResult.map(r => ({ name: r.category, value: Number(r.value) })));
+        
+        // Order Type Sales
+        const otSalesResult: any[] = await db.select(
+          `SELECT type, SUM(total_amount) as value FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ? GROUP BY type ORDER BY value DESC`,
+          [startDateString, endDateString]
+        );
+        setOrderTypeSales(otSalesResult.map(r => ({ name: r.type, value: Number(r.value) })));
+
+        // Top Selling Items
+        const topItemsResult: any[] = await db.select(
+          `SELECT mi.name, SUM(oi.price_at_order * oi.quantity) as sales, SUM(oi.quantity) as quantity FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE o.status = 'مكتمل' AND o.created_at BETWEEN ? AND ? GROUP BY mi.id, mi.name ORDER BY sales DESC LIMIT 5`,
+          [startDateString, endDateString]
+        );
+        setTopItems(topItemsResult.map(item => ({ ...item, sales: Number(item.sales), quantity: Number(item.quantity) })));
+
+        // Expenses Summary
+        const employeesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
+        const salaries = Number(employeesResult[0]?.totalSalaries) || 0;
+        setTotalSalariesPaid(salaries);
+        const purchaseOrdersResult: any[] = await db.select("SELECT SUM(total_amount) as totalPurchase FROM purchase_orders WHERE order_date BETWEEN ? AND ?", [startDateSqlDate, endDateSqlDate]);
+        const poAmount = Number(purchaseOrdersResult[0]?.totalPurchase) || 0;
+        setTotalPurchaseAmount(poAmount);
+        setTotalExpenses(salaries + poAmount);
+        
+        // Financial Reports
+        setNetCashFlow(revenue - (salaries + poAmount));
+
+        // Inventory Reports
+        const totalIngredientsResult: any[] = await db.select("SELECT COUNT(*) as count FROM ingredients");
+        setTotalIngredients(Number(totalIngredientsResult[0]?.count) || 0);
+        const lowStockDbResult: Ingredient[] = await db.select<Ingredient[]>("SELECT id, name, unit, stock_quantity as stockQuantity, cost_per_unit as costPerUnit, low_stock_threshold as lowStockThreshold FROM ingredients WHERE stock_quantity < low_stock_threshold AND low_stock_threshold IS NOT NULL");
+        setLowStockIngredientsCount(lowStockDbResult.length);
+        setLowStockItemsList(lowStockDbResult.map(ing => ({...ing, stockQuantity: Number(ing.stockQuantity), costPerUnit: Number(ing.costPerUnit), lowStockThreshold: ing.lowStockThreshold ? Number(ing.lowStockThreshold) : undefined })));
+
+        // Purchase Order Reports
+        const poStatsResult: any[] = await db.select("SELECT COUNT(*) as count FROM purchase_orders WHERE order_date BETWEEN ? AND ?", [startDateSqlDate, endDateSqlDate]);
+        setTotalPurchaseOrdersCount(Number(poStatsResult[0]?.count) || 0);
+        const recentPOsDbResult: any[] = await db.select("SELECT id, order_number as orderNumber, supplier_name as supplierName, total_amount as totalAmount, status, order_date as orderDate FROM purchase_orders WHERE order_date BETWEEN ? AND ? ORDER BY order_date DESC LIMIT 5", [startDateSqlDate, endDateSqlDate]);
+        setRecentPurchaseOrders(recentPOsDbResult.map(po => ({ ...po, orderDate: parseISO(po.orderDate), totalAmount: Number(po.totalAmount), items:[] })));
+
+      } catch (error) {
+        console.error("Error fetching all-in-one report data:", error);
+        toast({ title: "خطأ", description: "فشل في جلب بيانات التقرير الشامل.", variant: "destructive" });
+        // Reset states on error
+        setTotalRevenue(0); setTotalOrders(0); setAverageOrderValue(0); setMonthlySales([]); setCategorySales([]); setOrderTypeSales([]); setTopItems([]);
+        setTotalSalariesPaid(0); setTotalPurchaseAmount(0); setTotalExpenses(0); setNetCashFlow(0);
+        setTotalIngredients(0); setLowStockIngredientsCount(0); setLowStockItemsList([]);
+        setTotalPurchaseOrdersCount(0); setRecentPurchaseOrders([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchAllReportData();
+  }, [selectedPeriod, isClient, db, toast]);
+  
   const getPurchaseStatusBadgeVariant = (status: PurchaseOrder['status']) => {
     switch (status) {
       case 'مستلم': return 'default';
@@ -160,16 +216,25 @@ export default function AllInOneLegacyReportsPage() {
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
-    // In a real app, this would trigger re-fetching or re-calculating data
-    // based on the selected period. For now, it just updates the state.
   };
 
+ const getPeriodLabel = () => {
+    switch(selectedPeriod) {
+        case 'daily': return 'اليوم الحالي';
+        case 'weekly': return 'الأسبوع الحالي';
+        case 'monthly': return 'الشهر الحالي';
+        case 'quarterly': return 'الربع الحالي';
+        case 'semi_annually': return 'آخر 6 أشهر';
+        case 'annually': return 'السنة الحالية';
+        default: return 'الفترة المختارة';
+    }
+  };
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
       <>
-        <PageHeader title="التقرير الشامل (قديم)" description="تحليل شامل لأداء مشروعك." icon={BarChart3}/>
-        <p className="text-center text-muted-foreground py-10">جارٍ تحميل التقرير...</p>
+        <PageHeader title="التقرير الشامل (قديم)" description="جارٍ تحميل بيانات التقرير..." icon={BarChart3}/>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
@@ -178,7 +243,7 @@ export default function AllInOneLegacyReportsPage() {
     <>
       <PageHeader 
         title="التقرير الشامل (قديم)" 
-        description="تحليل شامل لأداء مشروعك." 
+        description={`تحليل شامل لأداء مشروعك لـ ${getPeriodLabel()}.`} 
         icon={BarChart3}
         actions={
           <div className="flex items-center gap-2">
@@ -188,23 +253,21 @@ export default function AllInOneLegacyReportsPage() {
                 <SelectValue placeholder="اختر الفترة" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="daily">يومي (هذا اليوم)</SelectItem>
-                <SelectItem value="weekly">أسبوعي (هذا الأسبوع)</SelectItem>
-                <SelectItem value="monthly">شهري (هذا الشهر)</SelectItem>
-                <SelectItem value="quarterly">ربع سنوي (هذا الربع)</SelectItem>
+                <SelectItem value="daily">يومي</SelectItem>
+                <SelectItem value="weekly">أسبوعي</SelectItem>
+                <SelectItem value="monthly">شهري</SelectItem>
+                <SelectItem value="quarterly">ربع سنوي</SelectItem>
                 <SelectItem value="semi_annually">نصف سنوي</SelectItem>
                 <SelectItem value="annually">سنوي</SelectItem>
-                <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem>
               </SelectContent>
             </Select>
           </div>
         }
       />
 
-      {/* Sales Summary Cards */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="text-xl">ملخص المبيعات ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+            <CardTitle className="text-xl">ملخص المبيعات ({getPeriodLabel()})</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card className="shadow-md">
@@ -240,10 +303,9 @@ export default function AllInOneLegacyReportsPage() {
         </CardContent>
       </Card>
       
-      {/* Expenses Summary Cards */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="text-xl">ملخص المصروفات ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+            <CardTitle className="text-xl">ملخص المصروفات ({getPeriodLabel()})</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card className="shadow-md">
@@ -253,7 +315,7 @@ export default function AllInOneLegacyReportsPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalSalariesPaid.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">إجمالي الرواتب المدفوعة</p>
+                <p className="text-xs text-muted-foreground">إجمالي رواتب الموظفين النشطين حاليًا</p>
             </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -263,7 +325,7 @@ export default function AllInOneLegacyReportsPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalPurchaseAmount.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">إجمالي تكلفة أوامر الشراء</p>
+                <p className="text-xs text-muted-foreground">إجمالي تكلفة أوامر الشراء في الفترة</p>
             </CardContent>
             </Card>
             <Card className="shadow-md">
@@ -273,16 +335,15 @@ export default function AllInOneLegacyReportsPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">${totalExpenses.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">الرواتب + المشتريات</p>
+                <p className="text-xs text-muted-foreground">الرواتب + المشتريات في الفترة</p>
             </CardContent>
             </Card>
         </CardContent>
       </Card>
 
-      {/* Financial Reports Cards */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-            <CardTitle className="text-xl">التقارير المالية ({selectedPeriod === 'monthly' ? 'الشهر الحالي' : 'الفترة المختارة'})</CardTitle>
+            <CardTitle className="text-xl">التقارير المالية ({getPeriodLabel()})</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
             <Card className="shadow-md">
@@ -304,21 +365,21 @@ export default function AllInOneLegacyReportsPage() {
                 <div className={`text-2xl font-bold ${netCashFlow >=0 ? 'text-green-600' : 'text-red-600'}`}>
                     ${netCashFlow.toFixed(2)}
                 </div>
-                <p className="text-xs text-muted-foreground">الإيرادات - المصروفات (تقديري)</p>
+                <p className="text-xs text-muted-foreground">الإيرادات - المصروفات (في الفترة)</p>
             </CardContent>
             </Card>
         </CardContent>
       </Card>
 
 
-      {/* Sales Charts */}
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 mb-8">
         <Card className="shadow-lg col-span-1 lg:col-span-2">
           <CardHeader>
-            <CardTitle>نظرة عامة على المبيعات الشهرية</CardTitle>
+            <CardTitle>نظرة عامة على المبيعات الشهرية (آخر 6 أشهر)</CardTitle>
             <CardDescription>أداء المبيعات خلال آخر 6 أشهر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] ps-0">
+            {monthlySales.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <RechartsBarChart data={monthlySales} layout="vertical" margin={{ right: 30, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -333,15 +394,17 @@ export default function AllInOneLegacyReportsPage() {
                 <Bar dataKey="sales" name="المبيعات" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} barSize={30} />
               </RechartsBarChart>
             </ResponsiveContainer>
+            ) : ( <p className="text-center text-muted-foreground pt-10">لا توجد بيانات مبيعات شهرية لعرضها.</p> )}
           </CardContent>
         </Card>
         
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>المبيعات حسب الفئة</CardTitle>
+            <CardTitle>المبيعات حسب الفئة ({getPeriodLabel()})</CardTitle>
             <CardDescription>توزيع الإيرادات عبر فئات العناصر.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
+            {categorySales.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -368,15 +431,17 @@ export default function AllInOneLegacyReportsPage() {
                 <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
               </PieChart>
             </ResponsiveContainer>
+            ) : ( <p className="text-center text-muted-foreground pt-10">لا توجد بيانات مبيعات حسب الفئة لهذه الفترة.</p> )}
           </CardContent>
         </Card>
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>المبيعات حسب نوع الطلب</CardTitle>
+            <CardTitle>المبيعات حسب نوع الطلب ({getPeriodLabel()})</CardTitle>
             <CardDescription>توزيع الإيرادات عبر أنواع الطلبات.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px]">
+            {orderTypeSales.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -403,16 +468,18 @@ export default function AllInOneLegacyReportsPage() {
                 <Legend wrapperStyle={{ fontSize: '12px', direction: 'rtl' }}/>
               </PieChart>
             </ResponsiveContainer>
+             ) : ( <p className="text-center text-muted-foreground pt-10">لا توجد بيانات مبيعات حسب نوع الطلب لهذه الفترة.</p> )}
           </CardContent>
         </Card>
       </div>
 
        <Card className="mb-8 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Utensils className="h-6 w-6 text-primary"/>العناصر الأكثر مبيعًا</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Utensils className="h-6 w-6 text-primary"/>العناصر الأكثر مبيعًا ({getPeriodLabel()})</CardTitle>
             <CardDescription>العناصر الأكثر شيوعًا حسب الإيرادات والكمية.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
+            {topItems.length > 0 ? (
              <Table>
                 <TableHeader>
                     <TableRow>
@@ -428,11 +495,12 @@ export default function AllInOneLegacyReportsPage() {
                         <TableCell>{index + 1}</TableCell>
                         <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-left font-semibold">${item.sales.toFixed(2)}</TableCell>
+                        <TableCell className="text-left font-semibold">${Number(item.sales).toFixed(2)}</TableCell>
                     </TableRow>
                 ))}
                 </TableBody>
             </Table>
+            ) : ( <p className="p-4 text-center text-muted-foreground">لا توجد بيانات عناصر مبيعة لهذه الفترة.</p> )}
           </CardContent>
         </Card>
 
@@ -471,8 +539,8 @@ export default function AllInOneLegacyReportsPage() {
                                 {lowStockItemsList.map(item => (
                                     <TableRow key={item.id}>
                                         <TableCell className="font-medium">{item.name} <span className="text-xs text-muted-foreground">({item.unit})</span></TableCell>
-                                        <TableCell className="text-center text-destructive font-semibold">{item.stockQuantity}</TableCell>
-                                        <TableCell className="text-center">{item.lowStockThreshold}</TableCell>
+                                        <TableCell className="text-center text-destructive font-semibold">{Number(item.stockQuantity).toLocaleString()}</TableCell>
+                                        <TableCell className="text-center">{item.lowStockThreshold?.toLocaleString()}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -484,7 +552,7 @@ export default function AllInOneLegacyReportsPage() {
             </Card>
              <Card className="shadow-lg">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>ملخص أوامر الشراء</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary"/>ملخص أوامر الشراء ({getPeriodLabel()})</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                     <div>
@@ -501,8 +569,8 @@ export default function AllInOneLegacyReportsPage() {
         
         <Card className="mb-8 shadow-lg">
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary"/>أحدث أوامر الشراء</CardTitle>
-                <CardDescription>عرض آخر 5 أوامر شراء تم إنشاؤها.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><ClipboardList className="h-6 w-6 text-primary"/>أحدث أوامر الشراء ({getPeriodLabel()})</CardTitle>
+                <CardDescription>عرض آخر 5 أوامر شراء تم إنشاؤها في الفترة.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
                 {recentPurchaseOrders.length > 0 ? (
@@ -525,16 +593,18 @@ export default function AllInOneLegacyReportsPage() {
                                     <TableCell className="text-center">
                                         <Badge variant={getPurchaseStatusBadgeVariant(po.status)}>{po.status}</Badge>
                                     </TableCell>
-                                    <TableCell className="text-left font-semibold">${po.totalAmount.toFixed(2)}</TableCell>
+                                    <TableCell className="text-left font-semibold">${Number(po.totalAmount).toFixed(2)}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
                 ) : (
-                    <p className="p-4 text-center text-muted-foreground">لا توجد أوامر شراء مسجلة بعد.</p>
+                    <p className="p-4 text-center text-muted-foreground">لا توجد أوامر شراء مسجلة لهذه الفترة.</p>
                 )}
             </CardContent>
         </Card>
     </>
   );
 }
+
+    

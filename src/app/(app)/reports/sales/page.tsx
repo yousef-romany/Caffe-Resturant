@@ -85,7 +85,7 @@ export default function SalesReportPage() {
 
   useEffect(() => {
     if (!isClient || !db) {
-      setIsLoading(db === null); // Still loading if db connection attempt is pending
+      setIsLoading(db === null); 
       return;
     }
 
@@ -361,3 +361,5 @@ export default function SalesReportPage() {
     </>
   );
 }
+
+    

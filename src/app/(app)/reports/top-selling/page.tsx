@@ -180,7 +180,7 @@ export default function TopSellingReportPage() {
                         <TableCell>{index + 1}</TableCell>
                         <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-left font-semibold">${item.sales.toFixed(2)}</TableCell>
+                        <TableCell className="text-left font-semibold">${Number(item.sales).toFixed(2)}</TableCell>
                     </TableRow>
                 )) : (
                     <TableRow>
@@ -194,3 +194,5 @@ export default function TopSellingReportPage() {
     </>
   );
 }
+
+    

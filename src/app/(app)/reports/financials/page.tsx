@@ -4,13 +4,15 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_ORDERS, DUMMY_EMPLOYEES, DUMMY_PURCHASE_ORDERS, type PurchaseOrder } from '@/constants';
 import { Wallet, TrendingUp, TrendingDown, Landmark, CalendarDays } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
-type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
 
 const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
   const now = new Date();
@@ -33,6 +35,10 @@ const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: D
 };
 
 export default function FinancialsReportPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+
   const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); // Placeholder
   const [netCashFlow, setNetCashFlow] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -42,34 +48,66 @@ export default function FinancialsReportPage() {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    async function initDb() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB for financials report:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+      }
+    }
+    initDb();
+  }, [toast]);
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || !db) {
+      setIsLoading(db === null);
+      return;
+    }
 
-    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+    async function fetchFinancialData() {
+        setIsLoading(true);
+        const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+        const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss');
+        const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
+        const startDateSqlDate = format(startDate, 'yyyy-MM-dd');
+        const endDateSqlDate = format(endDate, 'yyyy-MM-dd');
+      try {
+        // Fetch revenue for the period
+        const revenueResult: any[] = await db.select(
+          "SELECT SUM(total_amount) as totalRevenue FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+          [startDateString, endDateString]
+        );
+        const revenueForPeriod = Number(revenueResult[0]?.totalRevenue) || 0;
+        setTotalRevenue(revenueForPeriod);
 
-    const filteredCompletedOrders = DUMMY_ORDERS.filter(o => {
-      const orderDate = new Date(o.createdAt);
-      return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate && o.status === 'مكتمل';
-    });
-    const revenueForPeriod = filteredCompletedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-    setTotalRevenue(revenueForPeriod);
+        // Fetch salaries (current snapshot)
+        const salariesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
+        const salaries = Number(salariesResult[0]?.totalSalaries) || 0;
 
-    const salaries = DUMMY_EMPLOYEES.reduce((sum, emp) => sum + (emp.salary || 0), 0); // Snapshot of current salaries
+        // Fetch purchase orders amount for the period
+        const purchaseOrdersResult: any[] = await db.select(
+          "SELECT SUM(total_amount) as totalPurchase FROM purchase_orders WHERE order_date BETWEEN ? AND ?",
+          [startDateSqlDate, endDateSqlDate]
+        );
+        const poAmountForPeriod = Number(purchaseOrdersResult[0]?.totalPurchase) || 0;
+        
+        const expensesForPeriod = salaries + poAmountForPeriod;
+        setTotalExpenses(expensesForPeriod);
+        
+        setNetCashFlow(revenueForPeriod - expensesForPeriod);
 
-    const filteredPurchaseOrders = DUMMY_PURCHASE_ORDERS.filter(po => {
-        const orderDate = new Date(po.orderDate);
-        return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate;
-    });
-    const poAmountForPeriod = filteredPurchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0);
-    
-    const expensesForPeriod = salaries + poAmountForPeriod;
-    setTotalExpenses(expensesForPeriod);
-    
-    setNetCashFlow(revenueForPeriod - expensesForPeriod);
-
-  }, [selectedPeriod, isClient]);
+      } catch (error) {
+        console.error("Error fetching financial data:", error);
+        toast({ title: "خطأ", description: "فشل في جلب البيانات المالية.", variant: "destructive" });
+        setTotalRevenue(0); setTotalExpenses(0); setNetCashFlow(0);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchFinancialData();
+  }, [selectedPeriod, isClient, db, toast]);
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
@@ -87,11 +125,11 @@ export default function FinancialsReportPage() {
     }
   };
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
       <>
-        <PageHeader title="التقرير المالي" description="نظرة عامة على الوضع المالي." icon={Landmark}/>
-        <p className="text-center text-muted-foreground py-10">جارٍ تحميل التقرير...</p>
+        <PageHeader title="التقرير المالي" description="جارٍ تحميل بيانات التقرير..." icon={Landmark}/>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
