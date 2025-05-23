@@ -5,20 +5,22 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { type OrderStatus } from '@/constants';
-import { DollarSign, ShoppingBag, Users, Wallet, Utensils } from 'lucide-react';
+import { DollarSign, ShoppingBag, Users, Wallet, Utensils, TrendingUp, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 import { useToast } from '@/hooks/use-toast';
-import { parseISO, format } from 'date-fns';
+import { parseISO, format, startOfDay, endOfDay } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
 interface DashboardStats {
-  totalRevenue: number;
+  totalRevenueAllTime: number;
+  totalRevenueToday: number;
   activeOrdersCount: number;
+  totalOrdersToday: number;
   totalEmployees: number;
-  estimatedOperationalBalance: number; // New field for calculated balance
+  estimatedOperationalBalanceToday: number;
 }
 
 interface TopSellingItem {
@@ -44,10 +46,12 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [stats, setStats] = useState<DashboardStats>({
-    totalRevenue: 0,
+    totalRevenueAllTime: 0,
+    totalRevenueToday: 0,
     activeOrdersCount: 0,
+    totalOrdersToday: 0,
     totalEmployees: 0,
-    estimatedOperationalBalance: 0, // Initialize
+    estimatedOperationalBalanceToday: 0,
   });
   const [topSellingItems, setTopSellingItems] = useState<TopSellingItem[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
@@ -76,9 +80,27 @@ export default function DashboardPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      // Total Revenue for completed orders
-      const revenueResult: any[] = await currentDb.select("SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل'");
-      const totalRevenue = Number(revenueResult[0]?.total) || 0;
+      const todayStart = format(startOfDay(new Date()), 'yyyy-MM-dd HH:mm:ss');
+      const todayEnd = format(endOfDay(new Date()), 'yyyy-MM-dd HH:mm:ss');
+
+      // Total Revenue All Time (completed orders)
+      const revenueAllResult: any[] = await currentDb.select("SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل'");
+      const totalRevenueAllTime = Number(revenueAllResult[0]?.total) || 0;
+
+      // Total Revenue Today (completed orders)
+      const revenueTodayResult: any[] = await currentDb.select(
+        "SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+        [todayStart, todayEnd]
+      );
+      const totalRevenueToday = Number(revenueTodayResult[0]?.total) || 0;
+      
+      // Total Orders Today (completed orders)
+      const ordersTodayResult: any[] = await currentDb.select(
+        "SELECT COUNT(*) as count FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+        [todayStart, todayEnd]
+      );
+      const totalOrdersToday = Number(ordersTodayResult[0]?.count) || 0;
+
 
       // Active Orders Count
       const activeOrdersResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM orders WHERE status IN ('قيد الانتظار', 'قيد التجهيز')");
@@ -88,15 +110,18 @@ export default function DashboardPage() {
       const employeesResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
       const totalEmployees = Number(employeesResult[0]?.count) || 0;
       
-      // Total cost of received purchase orders
-      const purchaseCostsResult: any[] = await currentDb.select("SELECT SUM(total_amount) as totalPurchaseCosts FROM purchase_orders WHERE status = 'مستلم'");
-      const totalPurchaseCosts = Number(purchaseCostsResult[0]?.totalPurchaseCosts) || 0;
+      // Total cost of purchase orders received TODAY
+      const purchaseCostsTodayResult: any[] = await currentDb.select(
+          "SELECT SUM(total_amount) as totalPurchaseCosts FROM purchase_orders WHERE status = 'مستلم' AND received_date BETWEEN ? AND ?",
+          [format(startOfDay(new Date()), 'yyyy-MM-dd'), format(endOfDay(new Date()), 'yyyy-MM-dd')]
+      );
+      const totalPurchaseCostsToday = Number(purchaseCostsTodayResult[0]?.totalPurchaseCosts) || 0;
 
-      const estimatedOperationalBalance = totalRevenue - totalPurchaseCosts;
+      const estimatedOperationalBalanceToday = totalRevenueToday - totalPurchaseCostsToday;
       
-      setStats({ totalRevenue, activeOrdersCount, totalEmployees, estimatedOperationalBalance });
+      setStats({ totalRevenueAllTime, totalRevenueToday, activeOrdersCount, totalOrdersToday, totalEmployees, estimatedOperationalBalanceToday });
 
-      // Top Selling Items (by revenue from completed orders)
+      // Top Selling Items (by revenue from completed orders - all time for now, can be filtered by period)
       const topItemsResult: any[] = await currentDb.select(`
         SELECT 
           mi.id, 
@@ -106,14 +131,14 @@ export default function DashboardPage() {
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
         JOIN menu_items mi ON oi.menu_item_id = mi.id
-        WHERE o.status = 'مكتمل'
+        WHERE o.status = 'مكتمل' 
         GROUP BY mi.id, mi.name 
         ORDER BY totalRevenue DESC 
         LIMIT 5
       `);
       setTopSellingItems(topItemsResult.map(item => ({...item, totalRevenue: Number(item.totalRevenue), quantitySold: Number(item.quantitySold) })));
 
-      // Recent Orders
+      // Recent Orders (last 5, all statuses)
       const recentOrdersResult: any[] = await currentDb.select(`
         SELECT o.id, o.order_number as orderNumber, o.type, o.total_amount as totalAmount, o.status, o.created_at as createdAt, ti.number as tableNumber
         FROM orders o
@@ -149,47 +174,77 @@ export default function DashboardPage() {
     <>
       <PageHeader title="لوحة التحكم" description="نظرة عامة على نشاط كافيه بوس إكسبريس الخاص بك." />
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
-            <DollarSign className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">(للطلبات المكتملة - كل الأوقات)</p> 
-          </CardContent>
-        </Card>
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الطلبات النشطة</CardTitle>
-            <ShoppingBag className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeOrdersCount}</div>
-            <p className="text-xs text-muted-foreground">قيد الانتظار أو التجهيز حاليًا</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الرصيد التشغيلي التقديري</CardTitle>
-            <Wallet className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${stats.estimatedOperationalBalance.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">إجمالي الإيرادات المكتملة - تكلفة المشتريات المستلمة</p>
-          </CardContent>
-        </Card>
-         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">إجمالي الموظفين</CardTitle>
-            <Users className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-            <p className="text-xs text-muted-foreground">موظف نشط حاليًا</p>
-          </CardContent>
-        </Card>
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight mb-4 text-primary">إحصائيات اليوم ({format(new Date(), 'd MMMM yyyy', {locale: arSA})})</h2>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">إيرادات اليوم</CardTitle>
+                <TrendingUp className="h-5 w-5 text-green-500" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold text-green-600">${stats.totalRevenueToday.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">للطلبات المكتملة اليوم</p> 
+            </CardContent>
+            </Card>
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">طلبات اليوم</CardTitle>
+                <ShoppingBag className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{stats.totalOrdersToday}</div>
+                <p className="text-xs text-muted-foreground">الطلبات المكتملة اليوم</p>
+            </CardContent>
+            </Card>
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">الرصيد التشغيلي (اليوم)</CardTitle>
+                <Wallet className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className={`text-2xl font-bold ${stats.estimatedOperationalBalanceToday >=0 ? 'text-green-600' : 'text-red-600'}`}>${stats.estimatedOperationalBalanceToday.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">إيرادات اليوم - تكلفة مشتريات اليوم المستلمة</p>
+            </CardContent>
+            </Card>
+        </div>
+      </div>
+
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight mb-4 text-primary">إحصائيات عامة</h2>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">إجمالي الإيرادات (كل الأوقات)</CardTitle>
+                <DollarSign className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">${stats.totalRevenueAllTime.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">(للطلبات المكتملة)</p> 
+            </CardContent>
+            </Card>
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">الطلبات النشطة حاليًا</CardTitle>
+                <Calendar className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{stats.activeOrdersCount}</div>
+                <p className="text-xs text-muted-foreground">قيد الانتظار أو التجهيز</p>
+            </CardContent>
+            </Card>
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">إجمالي الموظفين النشطين</CardTitle>
+                <Users className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{stats.totalEmployees}</div>
+                <p className="text-xs text-muted-foreground">موظف مسجل ونشط حاليًا</p>
+            </CardContent>
+            </Card>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -224,7 +279,7 @@ export default function DashboardPage() {
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>العناصر الأكثر مبيعًا</CardTitle>
+            <CardTitle>العناصر الأكثر مبيعًا (كل الأوقات)</CardTitle>
           </CardHeader>
           <CardContent>
              {topSellingItems.length > 0 ? topSellingItems.map(item => (
@@ -245,3 +300,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    

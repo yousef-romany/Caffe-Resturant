@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -31,10 +32,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { EMPLOYEE_ROLES, type Employee, type EmployeeRole } from '@/constants';
+import { EMPLOYEE_ROLES, EMPLOYEE_SHIFTS, type Employee, type EmployeeRole, type EmployeeShift } from '@/constants';
 import { PlusCircle, Edit, Trash2, UsersRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
@@ -45,8 +46,9 @@ const initialNewEmployeeState: Omit<Employee, 'id' | 'hireDate'> & { hireDate: s
   phone: '',
   email: '',
   salary: undefined,
-  hireDate: new Date().toISOString().split('T')[0], // Default to today
+  hireDate: new Date().toISOString().split('T')[0], 
   is_active: true,
+  shift: EMPLOYEE_SHIFTS[0], // Default shift
 };
 
 export default function EmployeesPage() {
@@ -83,12 +85,13 @@ export default function EmployeesPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      const fetchedEmployees: any[] = await currentDb.select('SELECT id, name, role, phone, email, salary, hire_date as hireDate, is_active FROM employees ORDER BY name');
+      const fetchedEmployees: any[] = await currentDb.select('SELECT id, name, role, phone, email, salary, hire_date as hireDate, is_active, shift FROM employees ORDER BY name');
       setEmployees(fetchedEmployees.map(emp => ({
         ...emp,
-        hireDate: emp.hireDate ? parseISO(emp.hireDate) : new Date(), 
+        hireDate: emp.hireDate && isValid(parseISO(emp.hireDate)) ? parseISO(emp.hireDate) : new Date(), 
         salary: emp.salary !== null && emp.salary !== undefined ? Number(emp.salary) : undefined,
         is_active: Boolean(emp.is_active),
+        shift: emp.shift as EmployeeShift || EMPLOYEE_SHIFTS[0], // Ensure shift has a default
       })));
     } catch (error) {
       console.error("Error fetching employees:", error);
@@ -107,6 +110,10 @@ export default function EmployeesPage() {
 
   const handleRoleChange = (value: string) => {
     setNewEmployeeData(prev => ({ ...prev, role: value as EmployeeRole }));
+  };
+
+  const handleShiftChange = (value: string) => {
+    setNewEmployeeData(prev => ({ ...prev, shift: value as EmployeeShift }));
   };
   
   const handleActiveChange = (checked: boolean) => {
@@ -131,20 +138,21 @@ export default function EmployeesPage() {
       salary: newEmployeeData.salary ? Number(newEmployeeData.salary) : null,
       hire_date: format(new Date(newEmployeeData.hireDate), 'yyyy-MM-dd'),
       is_active: newEmployeeData.is_active === undefined ? true : newEmployeeData.is_active,
+      shift: newEmployeeData.shift,
     };
 
     try {
       if (editingEmployee) {
         await db.execute(
-          'UPDATE employees SET name = $1, role = $2, phone = $3, email = $4, salary = $5, hire_date = $6, is_active = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8',
-          [employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, editingEmployee.id]
+          'UPDATE employees SET name = $1, role = $2, phone = $3, email = $4, salary = $5, hire_date = $6, is_active = $7, shift = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
+          [employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, employeeDataToSave.shift, editingEmployee.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات ${employeeDataToSave.name}.` });
       } else {
         const newEmployeeId = `emp-${Date.now()}`;
         await db.execute(
-          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [newEmployeeId, employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active]
+          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active, shift) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [newEmployeeId, employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, employeeDataToSave.shift]
         );
         toast({ title: "نجاح", description: `تمت إضافة الموظف ${employeeDataToSave.name}.` });
       }
@@ -154,7 +162,7 @@ export default function EmployeesPage() {
       await fetchEmployees(db); 
     } catch (error) {
       console.error("Error submitting employee:", error);
-      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات الموظف.", variant: "destructive" });
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات الموظف. تأكد أن رقم الهاتف والبريد الإلكتروني (إن وجد) غير مكررين.", variant: "destructive" });
     }
   };
 
@@ -166,6 +174,7 @@ export default function EmployeesPage() {
       salary: employee.salary ?? undefined,
       email: employee.email || '',
       is_active: employee.is_active === undefined ? true : employee.is_active,
+      shift: employee.shift || EMPLOYEE_SHIFTS[0],
     });
     setIsDialogOpen(true);
   };
@@ -180,9 +189,13 @@ export default function EmployeesPage() {
       await db.execute('DELETE FROM employees WHERE id = $1', [employeeToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف ${employeeToDelete.name}.`, variant: "destructive" });
       await fetchEmployees(db); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting employee:", error);
-      toast({ title: "خطأ في الحذف", description: "فشل حذف الموظف. قد يكون مرتبطًا ببيانات أخرى.", variant: "destructive" });
+      if (error.message && (error.message.toLowerCase().includes("foreign key constraint") || error.message.toLowerCase().includes("constraint failed"))) {
+         toast({ title: "خطأ في الحذف", description: "لا يمكن حذف الموظف لأنه مرتبط ببيانات أخرى (مثل حسابات مستخدمين أو سجلات حضور).", variant: "destructive" });
+      } else {
+        toast({ title: "خطأ في الحذف", description: "فشل حذف الموظف.", variant: "destructive" });
+      }
     }
   };
   
@@ -196,7 +209,7 @@ export default function EmployeesPage() {
     <>
       <PageHeader
         title="إدارة الموظفين"
-        description="إضافة وتعديل وحذف بيانات الموظفين."
+        description="إضافة وتعديل وحذف بيانات الموظفين وشفتاتهم."
         icon={UsersRound}
         actions={
           <Button onClick={openNewEmployeeDialog} className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -215,6 +228,7 @@ export default function EmployeesPage() {
                 <TableRow>
                   <TableHead>الاسم</TableHead>
                   <TableHead>الوظيفة</TableHead>
+                  <TableHead>الشفت</TableHead>
                   <TableHead>الهاتف</TableHead>
                   <TableHead>البريد الإلكتروني</TableHead>
                   <TableHead className="text-center">الراتب ($)</TableHead>
@@ -229,6 +243,7 @@ export default function EmployeesPage() {
                     <TableRow key={employee.id}>
                       <TableCell className="font-medium">{employee.name}</TableCell>
                       <TableCell>{employee.role}</TableCell>
+                      <TableCell>{employee.shift || '-'}</TableCell>
                       <TableCell>{employee.phone}</TableCell>
                       <TableCell>{employee.email || '-'}</TableCell>
                       <TableCell className="text-center">{employee.salary ? `$${employee.salary.toFixed(2)}` : '-'}</TableCell>
@@ -248,7 +263,7 @@ export default function EmployeesPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={9} className="h-24 text-center">
                       لا يوجد موظفون مسجلون بعد.
                     </TableCell>
                   </TableRow>
@@ -281,6 +296,19 @@ export default function EmployeesPage() {
                 <SelectContent>
                   {EMPLOYEE_ROLES.map(role => (
                     <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="shiftEmp" className="text-left">الشفت</Label>
+              <Select name="shift" value={newEmployeeData.shift} onValueChange={handleShiftChange}>
+                <SelectTrigger id="shiftEmp" className="col-span-3">
+                  <SelectValue placeholder="اختر الشفت" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYEE_SHIFTS.map(shift => (
+                    <SelectItem key={shift} value={shift}>{shift}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
