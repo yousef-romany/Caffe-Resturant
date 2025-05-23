@@ -31,6 +31,7 @@ import NextImage from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
+import { Switch } from '@/components/ui/switch'; // Added Switch import
 
 const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { manualCost?: number } = {
   name: '',
@@ -40,7 +41,7 @@ const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { manualCost?: nu
   description: '',
   dataAiHint: '',
   ingredients: [],
-  is_available: true,
+  is_available: true, // Default to true
 };
 
 const calculateMenuItemCost = (
@@ -56,8 +57,6 @@ const calculateMenuItemCost = (
     const stockIngredient = allStockIngredients.find(i => i.id === recipeIngredient.ingredientId);
     if (stockIngredient && recipeIngredient.quantity > 0 && stockIngredient.costPerUnit > 0) {
       let costForIngredient = 0;
-      // Simplified unit conversion logic for demonstration.
-      // A more robust solution would involve a dedicated unit conversion library or more complex logic.
       if (stockIngredient.unit === 'كيلوجرام' && recipeIngredient.unit === 'جرام') {
         costForIngredient = (stockIngredient.costPerUnit / 1000) * recipeIngredient.quantity;
       } else if (stockIngredient.unit === 'لتر' && recipeIngredient.unit === 'مللي لتر') {
@@ -66,7 +65,7 @@ const calculateMenuItemCost = (
         costForIngredient = (stockIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
       } else if (stockIngredient.unit === 'مللي لتر' && recipeIngredient.unit === 'لتر') {
         costForIngredient = (stockIngredient.costPerUnit * 1000) * recipeIngredient.quantity;
-      } else if (stockIngredient.unit === recipeIngredient.unit || (stockIngredient.unit === 'قطعة' && recipeIngredient.unit === 'قطعة') ) { // Direct match or piece to piece
+      } else if (stockIngredient.unit === recipeIngredient.unit || (stockIngredient.unit === 'قطعة' && recipeIngredient.unit === 'قطعة') ) {
         costForIngredient = stockIngredient.costPerUnit * recipeIngredient.quantity;
       } else {
         console.warn(`Unit mismatch for ingredient ${stockIngredient.name}: recipe unit ${recipeIngredient.unit}, stock unit ${stockIngredient.unit}. Cost calculation may be inaccurate. Attempting direct multiplication.`);
@@ -77,7 +76,7 @@ const calculateMenuItemCost = (
       console.warn(`Ingredient with ID ${recipeIngredient.ingredientId} not found in inventory.`);
     }
   });
-  return parseFloat(totalCost.toFixed(4)); // Using 4 decimal places for cost precision
+  return parseFloat(totalCost.toFixed(4));
 };
 
 
@@ -91,8 +90,7 @@ export default function MenuPage() {
   const { toast } = useToast();
   const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [allMenuItemIngredients, setAllMenuItemIngredients] = useState<any[]>([]);
-
+  // Removed allMenuItemIngredients state as it's not directly used for rendering or re-calculation outside fetch.
 
   useEffect(() => {
     async function loadDbAndFetchData() {
@@ -119,12 +117,11 @@ export default function MenuPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      const fetchedMenuItems: any[] = await currentDb.select('SELECT id, name, category, price, cost as manualCost, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items ORDER BY name');
+      const fetchedMenuItems: any[] = await currentDb.select('SELECT id, name, category, price, cost, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items ORDER BY name');
       const fetchedStockIngredients: StockIngredient[] = await currentDb.select('SELECT id, name, unit, cost_per_unit as costPerUnit FROM ingredients');
       const fetchedMenuItemRecipes: any[] = await currentDb.select('SELECT menu_item_id, ingredient_id as ingredientId, quantity, unit FROM menu_item_ingredients');
       
       setStockIngredients(fetchedStockIngredients);
-      setAllMenuItemIngredients(fetchedMenuItemRecipes); // Store for use in submit
 
       const itemsWithRecipesAndCosts = fetchedMenuItems.map(item => {
         const recipeIngredients = fetchedMenuItemRecipes
@@ -136,7 +133,7 @@ export default function MenuPage() {
         return {
           ...item,
           price: Number(item.price) || 0,
-          cost: (recipeIngredients && recipeIngredients.length > 0) ? calculatedCost : Number(item.manualCost) || 0, // Prioritize calculated cost
+          cost: (recipeIngredients && recipeIngredients.length > 0 && calculatedCost > 0) ? calculatedCost : (item.cost ? Number(item.cost) : 0), // Prioritize calculated cost if positive
           ingredients: recipeIngredients,
           is_available: Boolean(item.is_available),
         };
@@ -173,7 +170,6 @@ export default function MenuPage() {
   const handleAvailabilityChange = (checked: boolean) => {
     setNewItemData(prev => ({ ...prev, is_available: checked }));
   };
-
 
   const handleAddIngredientToRecipe = () => {
     setNewItemData(prev => ({
@@ -248,12 +244,11 @@ export default function MenuPage() {
     };
 
     try {
-      if (editingItem) { // Update existing item
+      if (editingItem) {
         await db.execute(
-          'UPDATE menu_items SET name = $1, category = $2, price = $3, cost = $4, image_url = $5, description = $6, data_ai_hint = $7, is_available = $8 WHERE id = $9',
+          'UPDATE menu_items SET name = $1, category = $2, price = $3, cost = $4, image_url = $5, description = $6, data_ai_hint = $7, is_available = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
           [menuItemToSave.name, menuItemToSave.category, menuItemToSave.price, menuItemToSave.cost, menuItemToSave.image_url, menuItemToSave.description, menuItemToSave.data_ai_hint, menuItemToSave.is_available, editingItem.id]
         );
-        // Update ingredients
         await db.execute('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [editingItem.id]);
         if (newItemData.ingredients && newItemData.ingredients.length > 0) {
           for (const ing of newItemData.ingredients) {
@@ -264,7 +259,7 @@ export default function MenuPage() {
           }
         }
         toast({ title: "نجاح", description: `تم تحديث ${menuItemToSave.name}.` });
-      } else { // Add new item
+      } else {
         const newItemId = `menu-${Date.now()}`;
         await db.execute(
           'INSERT INTO menu_items (id, name, category, price, cost, image_url, description, data_ai_hint, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
@@ -283,7 +278,7 @@ export default function MenuPage() {
       setIsDialogOpen(false);
       setEditingItem(null);
       setNewItemData(initialNewItemState);
-      if(db) await fetchAllMenuData(db); // Refresh data
+      if(db) await fetchAllMenuData(db);
     } catch (error) {
       console.error("Error submitting menu item:", error);
       toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات عنصر القائمة.", variant: "destructive" });
@@ -296,11 +291,11 @@ export default function MenuPage() {
       name: item.name,
       category: item.category,
       price: item.price,
-      manualCost: item.cost, // Store original or manual cost here
+      manualCost: (item.ingredients && item.ingredients.length > 0) ? undefined : item.cost, // Set manualCost if no ingredients, else it's calculated
       description: item.description || '',
       imageUrl: item.imageUrl,
       dataAiHint: item.dataAiHint || '',
-      ingredients: item.ingredients ? JSON.parse(JSON.stringify(item.ingredients)) : [], // Deep copy
+      ingredients: item.ingredients ? JSON.parse(JSON.stringify(item.ingredients)) : [],
       is_available: item.is_available === undefined ? true : item.is_available,
     }); 
     setIsDialogOpen(true);
@@ -309,15 +304,26 @@ export default function MenuPage() {
   const handleDeleteItem = async (itemToDelete: MenuItem) => {
     if (!db) return;
     try {
-      // Consider checking if item is in active orders before deleting in a real app
+      // First, delete related records in order_items if ON DELETE RESTRICT is used for menu_item_id
+      // However, if the user wants to delete a menu item, it's often implied that it should be removable even if ordered before.
+      // A soft delete (is_available = false) is usually preferred for items with history.
+      // For a hard delete with potential RESTRICT constraints, one might need to handle it.
+      // Current schema implies menu_item_id in order_items is RESTRICT.
+      // We should check if this item is part of any order.
+      const orderItemCheck: any[] = await db.select('SELECT 1 FROM order_items WHERE menu_item_id = $1 LIMIT 1', [itemToDelete.id]);
+      if (orderItemCheck.length > 0) {
+        toast({ title: "خطأ في الحذف", description: "لا يمكن حذف هذا العنصر لأنه مستخدم في طلبات سابقة. يمكنك جعله 'غير متوفر' بدلاً من ذلك.", variant: "destructive" });
+        return;
+      }
+
+      // If ON DELETE CASCADE is set for menu_item_id in menu_item_ingredients, this will also delete recipes.
       await db.execute('DELETE FROM menu_items WHERE id = $1', [itemToDelete.id]);
-      // menu_item_ingredients will be cascade deleted if FK set up with ON DELETE CASCADE
       toast({ title: "نجاح", description: `تم حذف ${itemToDelete.name}.`, variant: "destructive" });
-      if(db) await fetchAllMenuData(db); // Refresh data
+      if(db) await fetchAllMenuData(db);
     } catch (error: any) {
       console.error("Error deleting menu item:", error);
-       if (error.message && error.message.toLowerCase().includes("constraint failed")) {
-          toast({ title: "خطأ في الحذف", description: "لا يمكن حذف العنصر لأنه مستخدم في طلبات قائمة.", variant: "destructive" });
+       if (error.message && error.message.toLowerCase().includes("constraint")) {
+          toast({ title: "خطأ في الحذف", description: "لا يمكن حذف هذا العنصر لأنه مستخدم في بيانات أخرى (مثل الطلبات أو الوصفات).", variant: "destructive" });
       } else {
         toast({ title: "خطأ في الحذف", description: "فشل حذف عنصر القائمة.", variant: "destructive" });
       }
@@ -360,11 +366,11 @@ export default function MenuPage() {
       
       <div className="mb-6">
         <div className="relative">
-          <Search className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Search className="absolute end-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground rtl:left-3 rtl:right-auto" />
           <Input 
             type="search"
             placeholder="ابحث في عناصر القائمة..."
-            className="pe-10 w-full max-w-md"
+            className="pe-10 rtl:ps-10 rtl:pe-3 w-full max-w-md"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -385,7 +391,7 @@ export default function MenuPage() {
         </div>
       ) : (
         <p className="text-center text-muted-foreground py-10">
-          {searchTerm ? "لا توجد عناصر تطابق بحثك." : "لا توجد عناصر في القائمة بعد. أضف واحدة للبدء!"}
+          {menuItems.length === 0 ? "لا توجد عناصر في القائمة بعد. أضف واحدة للبدء!" : "لا توجد عناصر تطابق بحثك."}
         </p>
       )}
       
@@ -399,11 +405,11 @@ export default function MenuPage() {
           </DialogHeader>
           <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto ps-2 pe-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-left">الاسم</Label>
+              <Label htmlFor="name" className="text-left rtl:text-right">الاسم</Label>
               <Input id="name" name="name" value={newItemData.name} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="category" className="text-left">الفئة</Label>
+              <Label htmlFor="category" className="text-left rtl:text-right">الفئة</Label>
               <Select name="category" value={newItemData.category} onValueChange={handleCategoryChange}>
                 <SelectTrigger className="col-span-3">
                   <SelectValue placeholder="اختر الفئة" />
@@ -416,13 +422,13 @@ export default function MenuPage() {
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="price" className="text-left">السعر ($)</Label>
+              <Label htmlFor="price" className="text-left rtl:text-right">السعر ($)</Label>
               <Input id="price" name="price" type="number" value={newItemData.price} onChange={handleInputChange} className="col-span-3" min="0" step="0.01" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="cost" className="text-left">التكلفة ($)</Label>
+              <Label htmlFor="manualCost" className="text-left rtl:text-right">التكلفة ($)</Label>
               <Input 
-                id="cost" 
+                id="manualCost" 
                 name="manualCost"
                 type="number" 
                 value={newItemData.ingredients && newItemData.ingredients.length > 0 ? displayedCost.toFixed(4) : (newItemData.manualCost ?? 0)} 
@@ -438,11 +444,11 @@ export default function MenuPage() {
                  <p className="col-span-4 text-xs text-muted-foreground text-center -mt-2">التكلفة ${displayedCost.toFixed(4)} محسوبة بناءً على المكونات المحددة.</p>
              )}
             <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="description" className="text-left pt-2">الوصف</Label>
+              <Label htmlFor="description" className="text-left rtl:text-right pt-2">الوصف</Label>
               <Textarea id="description" name="description" value={newItemData.description || ''} onChange={handleInputChange} className="col-span-3" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="imageUrl" className="text-left">رابط الصورة</Label>
+              <Label htmlFor="imageUrl" className="text-left rtl:text-right">رابط الصورة</Label>
               <Input id="imageUrl" name="imageUrl" value={newItemData.imageUrl || ''} onChange={handleInputChange} className="col-span-3" placeholder="اختياري، مثال: https://placehold.co/300x200.png"/>
             </div>
             {newItemData.imageUrl && (
@@ -453,11 +459,11 @@ export default function MenuPage() {
               </div>
             )}
              <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="dataAiHint" className="text-left">تلميح للذكاء الاصطناعي</Label>
+              <Label htmlFor="dataAiHint" className="text-left rtl:text-right">تلميح للذكاء الاصطناعي</Label>
               <Input id="dataAiHint" name="dataAiHint" value={newItemData.dataAiHint || ''} onChange={handleInputChange} className="col-span-3" placeholder="مثال: كوب قهوة، برجر بطاطس (كلمتان كحد أقصى)"/>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="is_available" className="text-left">متوفر؟</Label>
+                <Label htmlFor="is_available" className="text-left rtl:text-right">متوفر؟</Label>
                 <Switch
                     id="is_available"
                     checked={newItemData.is_available}
@@ -466,13 +472,12 @@ export default function MenuPage() {
                 />
             </div>
 
-
             <Separator className="my-4 col-span-4" />
 
             <div className="col-span-4 space-y-4">
               <h3 className="text-lg font-medium text-center">مكونات هذا العنصر</h3>
               {(newItemData.ingredients || []).map((ingredient, index) => (
-                <div key={index} className="grid grid-cols-12 items-center gap-2 p-3 border rounded-md">
+                <div key={index} className="grid grid-cols-12 items-end gap-2 p-3 border rounded-md">
                   <div className="col-span-5">
                     <Label htmlFor={`ingredientId-${index}`} className="sr-only">المكون</Label>
                     <Select 
@@ -497,7 +502,7 @@ export default function MenuPage() {
                       value={ingredient.quantity} 
                       onChange={(e) => handleRecipeIngredientChange(index, 'quantity', e.target.value)} 
                       min="0.001" 
-                      step="0.001"
+                      step="any"
                       placeholder="الكمية"
                     />
                   </div>
@@ -545,4 +550,4 @@ export default function MenuPage() {
     </>
   );
 }
-
+    
