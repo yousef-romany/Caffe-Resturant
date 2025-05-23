@@ -10,19 +10,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { DUMMY_SYSTEM_USERS, DUMMY_ROLES, DUMMY_EMPLOYEES, DUMMY_PERMISSIONS_LIST, type SystemUser, type Role as AppRole, type Employee } from '@/constants';
+import { DUMMY_PERMISSIONS_LIST, type SystemUser, type Role as AppRole, type Employee } from '@/constants';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { getDb } from '@/lib/db';
 
-
-const initialNewUserState: Omit<SystemUser, 'id'> & { password?: string } = {
+const initialNewUserState: Omit<SystemUser, 'id' | 'hashedPassword'> & { password?: string } = {
   username: '',
   fullName: '',
-  employeeId: '',
+  employeeId: undefined,
   roles: [],
   isActive: true,
   password: '',
@@ -36,9 +36,11 @@ const initialNewRoleState: Omit<AppRole, 'id'> = {
 
 
 export default function UserManagementPage() {
+  const [db, setDbInstance] = useState<any>(null);
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [allPermissions, setAllPermissions] = useState<string[]>(DUMMY_PERMISSIONS_LIST); // Placeholder, should be fetched from DB
   const { toast } = useToast();
 
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
@@ -49,21 +51,65 @@ export default function UserManagementPage() {
 
   const [newUserData, setNewUserData] = useState(initialNewUserState);
   const [newRoleData, setNewRoleData] = useState(initialNewRoleState);
-
-  const allPermissions = useMemo(() => {
-    // In a real app, this would likely come from a dedicated permissions list or endpoint
-    const permissionsSet = new Set<string>();
-    DUMMY_ROLES.forEach(role => role.permissions.forEach(perm => permissionsSet.add(perm)));
-    DUMMY_PERMISSIONS_LIST.forEach(perm => permissionsSet.add(perm)); // Ensure all base permissions are included
-    return Array.from(permissionsSet).sort();
-  }, []);
-
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setSystemUsers(DUMMY_SYSTEM_USERS);
-    setRoles(DUMMY_ROLES);
-    setEmployees(DUMMY_EMPLOYEES);
-  }, []);
+    async function loadDbAndData() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive"});
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        await fetchAllData(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل البيانات الأولية.", variant: "destructive"});
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDbAndData();
+  }, [toast]);
+
+  const fetchAllData = async (currentDb: any) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const usersData = await currentDb.select<SystemUser[]>('SELECT id, username, full_name, employee_id, is_active FROM system_users ORDER BY username');
+      // For roles, we need to fetch roles and their permissions separately and combine them.
+      const rolesData = await currentDb.select<AppRole[]>('SELECT id, name, description FROM roles ORDER BY name');
+      const rolesWithPermissions = await Promise.all(rolesData.map(async (role: AppRole) => {
+        const permissionsRaw = await currentDb.select<{permission_id: string}[]>("SELECT permission_id FROM role_permissions WHERE role_id = ?", [role.id]);
+        return { ...role, permissions: permissionsRaw.map(p => p.permission_id) };
+      }));
+      
+      const userRolesPromises = usersData.map(async (user: SystemUser) => {
+        const userRolesRaw = await currentDb.select<{role_id: string}[]>('SELECT role_id FROM user_roles WHERE user_id = ?', [user.id]);
+        return { ...user, roles: userRolesRaw.map(ur => ur.role_id) };
+      });
+      const usersWithRoles = await Promise.all(userRolesPromises);
+
+      const employeesData = await currentDb.select<Employee[]>('SELECT id, name, role FROM employees WHERE is_active = true ORDER BY name'); // Assuming employees table exists
+      
+      // Fetch permissions from DB (assuming permissions table is populated)
+      const permissionsFromDb = await currentDb.select<{name: string}[]>('SELECT name FROM permissions ORDER BY name');
+      setAllPermissions(permissionsFromDb.map(p => p.name));
+
+      setSystemUsers(usersWithRoles);
+      setRoles(rolesWithPermissions);
+      setEmployees(employeesData);
+
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast({ title: "خطأ", description: "فشل في جلب البيانات من قاعدة البيانات.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const getRoleNameById = (roleId: string): string => {
     const role = roles.find(r => r.id === roleId);
@@ -89,9 +135,25 @@ export default function UserManagementPage() {
     });
   };
 
-  const handleUserActiveChange = (checked: boolean) => {
-    setNewUserData(prev => ({ ...prev, isActive: checked }));
+  const handleUserActiveChangeSwitch = async (userId: string, isActive: boolean) => {
+    if (!db) return;
+    try {
+      await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [isActive, userId]);
+      setSystemUsers(prevUsers =>
+        prevUsers.map(u =>
+        u.id === userId ? { ...u, isActive: isActive } : u
+        )
+      );
+      toast({
+          title: `تم تغيير حالة المستخدم بنجاح`,
+          description: `أصبح المستخدم ${isActive ? 'نشط' : 'غير نشط'}.`,
+      });
+    } catch (error) {
+      console.error("Error updating user active status:", error);
+      toast({ title: "خطأ", description: "فشل تحديث حالة المستخدم.", variant: "destructive" });
+    }
   };
+
 
   const openNewUserDialog = () => {
     setEditingUser(null);
@@ -101,11 +163,19 @@ export default function UserManagementPage() {
 
   const handleEditUser = (user: SystemUser) => {
     setEditingUser(user);
-    setNewUserData({ ...user, password: '' }); // Don't prefill password for editing
+    setNewUserData({ 
+      username: user.username,
+      fullName: user.fullName,
+      employeeId: user.employeeId,
+      roles: user.roles || [], // Ensure roles is an array
+      isActive: user.isActive,
+      password: '', // Don't prefill password
+    });
     setIsUserDialogOpen(true);
   };
 
-  const handleSubmitUser = () => {
+  const handleSubmitUser = async () => {
+    if (!db) return;
     if (!newUserData.username) {
       toast({ title: "خطأ", description: "اسم المستخدم مطلوب.", variant: "destructive" });
       return;
@@ -115,41 +185,60 @@ export default function UserManagementPage() {
       return;
     }
 
-    if (editingUser) {
-      const updatedUser: SystemUser = {
-        ...editingUser,
-        username: newUserData.username,
-        fullName: newUserData.fullName,
-        employeeId: newUserData.employeeId,
-        roles: newUserData.roles,
-        isActive: newUserData.isActive,
-        // Password update logic would be more complex in a real app (e.g., only if new password provided)
-        hashedPassword: newUserData.password ? `hashed_${newUserData.password}_example` : editingUser.hashedPassword,
-      };
-      setSystemUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
-      const index = DUMMY_SYSTEM_USERS.findIndex(u => u.id === editingUser.id);
-      if (index !== -1) DUMMY_SYSTEM_USERS[index] = updatedUser;
-      toast({ title: "نجاح", description: `تم تحديث المستخدم ${updatedUser.username}.` });
-    } else {
-      const newUser: SystemUser = {
-        ...newUserData,
-        id: `user-${Date.now()}`,
-        hashedPassword: `hashed_${newUserData.password}_example`, // Placeholder for hashing
-      };
-      delete (newUser as any).password; // Remove plain password
-      setSystemUsers(prev => [newUser, ...prev]);
-      DUMMY_SYSTEM_USERS.unshift(newUser);
-      toast({ title: "نجاح", description: `تمت إضافة المستخدم ${newUser.username}.` });
+    try {
+      if (editingUser) {
+        // Update existing user
+        const updateFields: any[] = [newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.isActive];
+        let sql = 'UPDATE system_users SET username = ?, full_name = ?, employee_id = ?, is_active = ?';
+        if (newUserData.password) {
+          // IMPORTANT: HASH THE PASSWORD IN A REAL APP BEFORE SAVING!
+          sql += ', hashed_password = ?';
+          updateFields.push(newUserData.password); // Plain text for now, hash in real app
+        }
+        sql += ' WHERE id = ?';
+        updateFields.push(editingUser.id);
+        
+        await db.execute(sql, updateFields);
+        
+        // Update user roles (delete old, insert new)
+        await db.execute('DELETE FROM user_roles WHERE user_id = ?', [editingUser.id]);
+        for (const roleId of newUserData.roles) {
+          await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [editingUser.id, roleId]);
+        }
+        toast({ title: "نجاح", description: `تم تحديث المستخدم ${newUserData.username}.` });
+      } else {
+        // Add new user
+        const newUserId = `user-${Date.now()}`;
+        // IMPORTANT: HASH THE PASSWORD IN A REAL APP BEFORE SAVING!
+        await db.execute(
+          'INSERT INTO system_users (id, username, full_name, employee_id, hashed_password, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+          [newUserId, newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.password, newUserData.isActive] // Plain text password
+        );
+        for (const roleId of newUserData.roles) {
+          await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleId]);
+        }
+        toast({ title: "نجاح", description: `تمت إضافة المستخدم ${newUserData.username}.` });
+      }
+      setIsUserDialogOpen(false);
+      await fetchAllData(db); // Re-fetch data
+    } catch (error) {
+      console.error("Error submitting user:", error);
+      toast({ title: "خطأ", description: "فشل حفظ بيانات المستخدم.", variant: "destructive" });
     }
-    setIsUserDialogOpen(false);
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
+    if (!db) return;
     // Add confirmation dialog in real app
-    setSystemUsers(prev => prev.filter(u => u.id !== userId));
-    const index = DUMMY_SYSTEM_USERS.findIndex(u => u.id === userId);
-    if (index !== -1) DUMMY_SYSTEM_USERS.splice(index, 1);
-    toast({ title: "نجاح", description: `تم حذف المستخدم.`, variant: "destructive" });
+    try {
+      await db.execute('DELETE FROM system_users WHERE id = ?', [userId]);
+      // user_roles will be cascade deleted if FK is set up with ON DELETE CASCADE
+      toast({ title: "نجاح", description: `تم حذف المستخدم.`, variant: "destructive" });
+      await fetchAllData(db); // Re-fetch data
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast({ title: "خطأ", description: "فشل حذف المستخدم.", variant: "destructive" });
+    }
   };
 
 
@@ -176,50 +265,93 @@ export default function UserManagementPage() {
 
   const handleEditRole = (role: AppRole) => {
     setEditingRole(role);
-    setNewRoleData(role);
+    setNewRoleData({
+      name: role.name,
+      description: role.description,
+      permissions: role.permissions || [] // Ensure permissions is an array
+    });
     setIsRoleDialogOpen(true);
   };
 
-  const handleSubmitRole = () => {
+  const handleSubmitRole = async () => {
+    if (!db) return;
     if (!newRoleData.name) {
       toast({ title: "خطأ", description: "اسم الدور مطلوب.", variant: "destructive" });
       return;
     }
-
-    if (editingRole) {
-      const updatedRole = { ...editingRole, ...newRoleData };
-      setRoles(prev => prev.map(r => r.id === editingRole.id ? updatedRole : r));
-      const index = DUMMY_ROLES.findIndex(r => r.id === editingRole.id);
-      if (index !== -1) DUMMY_ROLES[index] = updatedRole;
-      toast({ title: "نجاح", description: `تم تحديث الدور ${updatedRole.name}.` });
-    } else {
-      const newRole: AppRole = {
-        ...newRoleData,
-        id: `role-${Date.now()}`,
-      };
-      setRoles(prev => [newRole, ...prev]);
-      DUMMY_ROLES.unshift(newRole);
-      toast({ title: "نجاح", description: `تمت إضافة الدور ${newRole.name}.` });
+    
+    try {
+      if (editingRole) {
+        await db.execute(
+          'UPDATE roles SET name = ?, description = ? WHERE id = ?',
+          [newRoleData.name, newRoleData.description, editingRole.id]
+        );
+        await db.execute('DELETE FROM role_permissions WHERE role_id = ?', [editingRole.id]);
+        for (const permissionName of newRoleData.permissions) {
+          // Assuming permissionName is the unique name from 'permissions' table
+          // This part might need adjustment if permission IDs are used instead of names
+          await db.execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, (SELECT id FROM permissions WHERE name = ?))', 
+            [editingRole.id, permissionName]);
+        }
+        toast({ title: "نجاح", description: `تم تحديث الدور ${newRoleData.name}.` });
+      } else {
+        const newRoleId = `role-${Date.now()}`;
+        await db.execute(
+          'INSERT INTO roles (id, name, description) VALUES (?, ?, ?)',
+          [newRoleId, newRoleData.name, newRoleData.description]
+        );
+        for (const permissionName of newRoleData.permissions) {
+           await db.execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, (SELECT id FROM permissions WHERE name = ?))', 
+            [newRoleId, permissionName]);
+        }
+        toast({ title: "نجاح", description: `تمت إضافة الدور ${newRoleData.name}.` });
+      }
+      setIsRoleDialogOpen(false);
+      await fetchAllData(db); // Re-fetch data
+    } catch (error) {
+      console.error("Error submitting role:", error);
+      toast({ title: "خطأ", description: "فشل حفظ بيانات الدور.", variant: "destructive" });
     }
-    setIsRoleDialogOpen(false);
   };
   
-  const handleDeleteRole = (roleId: string) => {
-    // Check if role is in use by any user
-    const isRoleInUse = systemUsers.some(user => user.roles.includes(roleId));
-    if (isRoleInUse) {
-      toast({
-        title: "خطأ عند الحذف",
-        description: "لا يمكن حذف هذا الدور لأنه مستخدم حاليًا من قبل مستخدم واحد على الأقل.",
-        variant: "destructive",
-      });
-      return;
+  const handleDeleteRole = async (roleId: string) => {
+    if (!db) return;
+    try {
+      const usersWithRole = await db.select('SELECT COUNT(*) as count FROM user_roles WHERE role_id = ?', [roleId]);
+      if (usersWithRole[0].count > 0) {
+        toast({
+          title: "خطأ عند الحذف",
+          description: "لا يمكن حذف هذا الدور لأنه مستخدم حاليًا من قبل مستخدم واحد على الأقل.",
+          variant: "destructive",
+        });
+        return;
+      }
+      await db.execute('DELETE FROM roles WHERE id = ?', [roleId]);
+      // role_permissions will be cascade deleted if FK is set up with ON DELETE CASCADE
+      toast({ title: "نجاح", description: `تم حذف الدور.`, variant: "destructive" });
+      await fetchAllData(db); // Re-fetch data
+    } catch (error) {
+      console.error("Error deleting role:", error);
+      toast({ title: "خطأ", description: "فشل حذف الدور.", variant: "destructive" });
     }
-    setRoles(prev => prev.filter(r => r.id !== roleId));
-    const index = DUMMY_ROLES.findIndex(r => r.id === roleId);
-    if (index !== -1) DUMMY_ROLES.splice(index, 1);
-    toast({ title: "نجاح", description: `تم حذف الدور.`, variant: "destructive" });
   };
+
+  if (isLoading && !db) { // Show loading only if DB is not even tried to init
+    return (
+      <>
+        <PageHeader title="إدارة المستخدمين والصلاحيات" icon={UserCog}/>
+        <p className="text-center text-muted-foreground">جارٍ تحميل قاعدة البيانات...</p>
+      </>
+    )
+  }
+  if (isLoading) { // Show loading for data fetching
+    return (
+      <>
+        <PageHeader title="إدارة المستخدمين والصلاحيات" icon={UserCog}/>
+        <p className="text-center text-muted-foreground">جارٍ تحميل البيانات...</p>
+      </>
+    )
+  }
 
 
   return (
@@ -264,29 +396,17 @@ export default function UserManagementPage() {
                       <TableCell className="font-medium">{user.username}</TableCell>
                       <TableCell>{user.fullName || '-'}</TableCell>
                       <TableCell>
-                        {user.roles.map(roleId => (
+                        {(user.roles || []).map(roleId => (
                           <Badge key={roleId} variant="secondary" className="me-1 my-0.5 whitespace-nowrap">
                             {getRoleNameById(roleId)}
                           </Badge>
                         ))}
-                        {user.roles.length === 0 && '-'}
+                        {(user.roles || []).length === 0 && '-'}
                       </TableCell>
                       <TableCell className="text-center">
                         <Switch
                           checked={user.isActive}
-                          onCheckedChange={(checked) => {
-                             setSystemUsers(prevUsers =>
-                                prevUsers.map(u =>
-                                u.id === user.id ? { ...u, isActive: checked } : u
-                                )
-                            );
-                            const userToUpdate = DUMMY_SYSTEM_USERS.find(u => u.id === user.id);
-                            if(userToUpdate) userToUpdate.isActive = checked;
-                            toast({
-                                title: `تم تغيير حالة المستخدم ${user.username}`,
-                                description: `أصبح المستخدم ${checked ? 'نشط' : 'غير نشط'}.`,
-                            });
-                          }}
+                          onCheckedChange={(checked) => handleUserActiveChangeSwitch(user.id, checked)}
                           aria-label={`تنشيط المستخدم ${user.username}`}
                         />
                       </TableCell>
@@ -334,7 +454,7 @@ export default function UserManagementPage() {
                                 <TableCell className="font-medium">{role.name}</TableCell>
                                 <TableCell>{role.description || '-'}</TableCell>
                                 <TableCell className="max-w-xs truncate">
-                                  {role.permissions.slice(0, 3).join(', ')}{role.permissions.length > 3 ? '...' : ''}
+                                  {(role.permissions || []).slice(0, 3).join(', ')}{(role.permissions || []).length > 3 ? '...' : ''}
                                 </TableCell>
                                 <TableCell className="text-center space-x-2 space-x-reverse">
                                 <Button variant="ghost" size="icon" onClick={() => handleEditRole(role)}>
@@ -398,22 +518,24 @@ export default function UserManagementPage() {
               </div>
               <div className="space-y-2">
                 <Label>الأدوار</Label>
-                <div className="grid grid-cols-2 gap-2 p-2 border rounded-md">
-                  {roles.map(role => (
-                    <div key={role.id} className="flex items-center space-x-2 space-x-reverse">
-                      <Checkbox
-                        id={`role-${role.id}`}
-                        checked={newUserData.roles.includes(role.id)}
-                        onCheckedChange={(checked) => handleUserRoleChange(role.id, !!checked)}
-                      />
-                      <Label htmlFor={`role-${role.id}`} className="font-normal">{role.name}</Label>
-                    </div>
-                  ))}
-                </div>
+                <ScrollArea className="h-32 border rounded-md p-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {roles.map(role => (
+                      <div key={role.id} className="flex items-center space-x-2 space-x-reverse">
+                        <Checkbox
+                          id={`role-${role.id}`}
+                          checked={newUserData.roles.includes(role.id)}
+                          onCheckedChange={(checked) => handleUserRoleChange(role.id, !!checked)}
+                        />
+                        <Label htmlFor={`role-${role.id}`} className="font-normal">{role.name}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
               <div className="flex items-center space-x-2 space-x-reverse">
-                <Switch id="isActiveUser" checked={newUserData.isActive} onCheckedChange={handleUserActiveChange} />
-                <Label htmlFor="isActiveUser">المستخدم نشط</Label>
+                <Switch id="isActiveUserForm" checked={newUserData.isActive} onCheckedChange={(checked) => setNewUserData(prev => ({...prev, isActive: checked}))} />
+                <Label htmlFor="isActiveUserForm">المستخدم نشط</Label>
               </div>
             </div>
           </ScrollArea>
@@ -451,7 +573,7 @@ export default function UserManagementPage() {
                       <div key={permission} className="flex items-center space-x-2 space-x-reverse">
                         <Checkbox
                           id={`perm-${permission}`}
-                          checked={newRoleData.permissions.includes(permission)}
+                          checked={(newRoleData.permissions || []).includes(permission)}
                           onCheckedChange={(checked) => handleRolePermissionChange(permission, !!checked)}
                         />
                         <Label htmlFor={`perm-${permission}`} className="font-normal text-xs">{permission}</Label>
