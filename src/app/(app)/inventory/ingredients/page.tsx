@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { DUMMY_SUPPLIERS, INGREDIENT_UNITS, type Ingredient, type IngredientUnit, type Supplier } from '@/constants'; // Keep DUMMY_SUPPLIERS for now
+import { INGREDIENT_UNITS, type Ingredient, type IngredientUnit, type Supplier } from '@/constants';
 import { PlusCircle, Edit, Trash2, ShoppingBasket } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getDb } from '@/lib/db';
@@ -53,8 +53,9 @@ export default function IngredientsPage() {
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
   const [newIngredientData, setNewIngredientData] = useState(initialNewIngredientState);
   const { toast } = useToast();
-  const [suppliers, setSuppliers] = useState<Supplier[]>(DUMMY_SUPPLIERS); // Still using dummy suppliers for dropdown
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
 
   useEffect(() => {
     async function loadDbAndFetchData() {
@@ -63,17 +64,17 @@ export default function IngredientsPage() {
         if (!dbInstance) {
           toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
           setIsLoading(false);
+          setIsLoadingSuppliers(false);
           return;
         }
         setDbInstance(dbInstance);
         await fetchIngredients(dbInstance);
-        // TODO: Fetch suppliers from DB when suppliers page is converted
-        // await fetchSuppliers(dbInstance); 
+        await fetchSuppliers(dbInstance); 
       } catch (error) {
         console.error("Failed to initialize DB or fetch data:", error);
-        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات المكونات.", variant: "destructive" });
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات المكونات أو الموردين.", variant: "destructive" });
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Combined loading state should be handled
       }
     }
     loadDbAndFetchData();
@@ -101,8 +102,20 @@ export default function IngredientsPage() {
     }
   };
 
-  // Placeholder for fetching suppliers from DB in the future
-  // const fetchSuppliers = async (currentDb: Database) => { ... }
+  const fetchSuppliers = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoadingSuppliers(true);
+    try {
+      const fetchedSuppliers: Supplier[] = await currentDb.select('SELECT id, name FROM suppliers ORDER BY name');
+      setSuppliers(fetchedSuppliers);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+      toast({ title: "خطأ", description: "فشل في جلب قائمة الموردين.", variant: "destructive" });
+      setSuppliers([]);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -186,7 +199,7 @@ export default function IngredientsPage() {
       await fetchIngredients(db);
     } catch (error: any) {
       console.error("Error deleting ingredient:", error);
-      if (error.message && error.message.includes("constraint failed")) { // Basic check for FK constraint error
+      if (error.message && error.message.toLowerCase().includes("constraint failed")) {
           toast({ title: "خطأ في الحذف", description: "لا يمكن حذف المكون لأنه مستخدم في عناصر قائمة أو أوامر شراء.", variant: "destructive" });
       } else {
           toast({ title: "خطأ في الحذف", description: "فشل حذف المكون.", variant: "destructive" });
@@ -236,7 +249,7 @@ export default function IngredientsPage() {
                       <TableCell className="font-medium">{ingredient.name}</TableCell>
                       <TableCell>{ingredient.unit}</TableCell>
                       <TableCell className="text-center">{ingredient.stockQuantity.toLocaleString()}</TableCell>
-                      <TableCell className="text-center">${ingredient.costPerUnit.toFixed(4)}</TableCell>
+                      <TableCell className="text-center">${Number(ingredient.costPerUnit).toFixed(4)}</TableCell>
                       <TableCell className="text-center">{ingredient.lowStockThreshold?.toLocaleString() ?? '-'}</TableCell>
                       <TableCell className="text-center space-x-2 space-x-reverse">
                         <Button variant="ghost" size="icon" onClick={() => handleEditIngredient(ingredient)}>
@@ -303,11 +316,11 @@ export default function IngredientsPage() {
               <Label htmlFor="supplierId" className="text-left">المورد (اختياري)</Label>
               <Select name="supplierId" value={newIngredientData.supplierId || "none"} onValueChange={handleSupplierChange}>
                 <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="اختر المورد" />
+                  <SelectValue placeholder={isLoadingSuppliers ? "جارٍ تحميل الموردين..." : "اختر المورد"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مورد محدد</SelectItem>
-                  {suppliers.map(sup => ( // Still using dummy suppliers for now
+                  {suppliers.map(sup => (
                     <SelectItem key={sup.id} value={sup.id}>{sup.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -327,6 +340,5 @@ export default function IngredientsPage() {
     </>
   );
 }
-
 
     

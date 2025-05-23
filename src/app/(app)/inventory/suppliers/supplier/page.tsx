@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,11 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { DUMMY_SUPPLIERS, DUMMY_PURCHASE_ORDERS, type Supplier, type PurchaseOrder, type PurchaseOrderStatus } from '@/constants';
-import { Users, ListChecks, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react'; // Added ArrowRight
+import { type Supplier, type PurchaseOrder, type PurchaseOrderStatus } from '@/constants'; // Keep type imports
+import { Users, ListChecks, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Label } from '@/components/ui/label';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
 const getStatusBadgeVariant = (status: PurchaseOrderStatus) => {
   switch (status) {
@@ -28,6 +31,8 @@ const getStatusBadgeVariant = (status: PurchaseOrderStatus) => {
 
 export default function SupplierDetailPage() {
   const router = useRouter();
+  const { toast } = useToast();
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -40,34 +45,77 @@ export default function SupplierDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const idFromStorage = localStorage.getItem('selectedSupplierId');
-    if (idFromStorage) {
-      setSupplierId(idFromStorage);
-      // localStorage.removeItem('selectedSupplierId'); // Clear after fetching
-    } else {
-      setIsLoading(false);
-      // router.replace('/inventory/suppliers');
+    async function initializePage() {
+      const idFromStorage = localStorage.getItem('selectedSupplierId');
+      if (idFromStorage) {
+        setSupplierId(idFromStorage);
+      } else {
+        setIsLoading(false);
+        toast({ title: "لم يتم تحديد مورد", description: "الرجاء اختيار مورد من القائمة.", variant: "destructive"});
+        router.replace('/inventory/suppliers'); 
+      }
+      
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+        setIsLoading(false);
+      }
     }
-  }, [router]);
+    initializePage();
+  }, [router, toast]);
 
   useEffect(() => {
-    if (supplierId) {
-      const foundSupplier = DUMMY_SUPPLIERS.find(s => s.id === supplierId);
-      if (foundSupplier) {
-        setSupplier(foundSupplier);
-        const supplierPOs = DUMMY_PURCHASE_ORDERS.filter(po => po.supplierId === foundSupplier.id)
-          .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-        setPurchaseOrders(supplierPOs);
-      } else {
-        setSupplier(null);
-        setPurchaseOrders([]);
+    async function fetchSupplierAndPOs() {
+      if (db && supplierId) {
+        setIsLoading(true);
+        try {
+          const foundSupplierResult: Supplier[] = await db.select(
+            'SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers WHERE id = $1', 
+            [supplierId]
+          );
+          
+          if (foundSupplierResult.length > 0) {
+            setSupplier(foundSupplierResult[0]);
+
+            const supplierPOsResult: any[] = await db.select(
+              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, order_date as orderDate, supplier_name as supplierName FROM purchase_orders WHERE supplier_id = $1 ORDER BY order_date DESC',
+              [supplierId]
+            );
+            setPurchaseOrders(supplierPOsResult.map(po => ({
+              ...po,
+              orderDate: po.orderDate ? parseISO(po.orderDate) : new Date(), // Ensure orderDate is Date
+              totalAmount: Number(po.totalAmount) || 0,
+              items: [] // Items are not fetched here for simplicity
+            })));
+
+          } else {
+            setSupplier(null); 
+            setPurchaseOrders([]);
+            toast({ title: "لم يتم العثور على المورد", description: `المورد بالمعرف ${supplierId} غير موجود.`, variant: "destructive"});
+          }
+        } catch (error) {
+          console.error("Error fetching supplier details or POs:", error);
+          toast({ title: "خطأ", description: "فشل في جلب تفاصيل المورد أو أوامر الشراء.", variant: "destructive" });
+          setSupplier(null);
+          setPurchaseOrders([]);
+        } finally {
+          setIsLoading(false);
+          localStorage.removeItem('selectedSupplierId'); // Clear after fetching
+        }
+      } else if (!supplierId && !isLoading) {
+        setIsLoading(false);
       }
-      setIsLoading(false);
-      localStorage.removeItem('selectedSupplierId');
-    } else {
-       setIsLoading(false);
     }
-  }, [supplierId]);
+    fetchSupplierAndPOs();
+  }, [db, supplierId, toast, isLoading]);
 
   const availableYears = useMemo(() => {
     const years = new Set(purchaseOrders.map(po => getYear(new Date(po.orderDate)).toString()));
@@ -211,7 +259,7 @@ export default function SupplierDetailPage() {
                   <TableRow key={po.id}>
                     <TableCell className="font-medium">{po.orderNumber}</TableCell>
                     <TableCell>{format(new Date(po.orderDate), 'PP', { locale: arSA })}</TableCell>
-                    <TableCell>${po.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell>${Number(po.totalAmount).toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(po.status)}>{po.status}</Badge>
                     </TableCell>
@@ -231,5 +279,6 @@ export default function SupplierDetailPage() {
     </>
   );
 }
+    
 
     

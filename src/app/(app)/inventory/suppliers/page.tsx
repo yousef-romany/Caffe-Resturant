@@ -25,10 +25,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { DUMMY_SUPPLIERS, type Supplier } from '@/constants';
+import type { Supplier } from '@/constants';
 import { PlusCircle, Edit, Trash2, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
 const initialNewSupplierState: Omit<Supplier, 'id'> = {
   name: '',
@@ -39,59 +41,129 @@ const initialNewSupplierState: Omit<Supplier, 'id'> = {
 };
 
 export default function SuppliersPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [newSupplierData, setNewSupplierData] = useState(initialNewSupplierState);
   const { toast } = useToast();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setSuppliers(DUMMY_SUPPLIERS);
-  }, []);
+    async function loadDbAndFetchData() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        await fetchSuppliers(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات الموردين.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDbAndFetchData();
+  }, [toast]);
+
+  const fetchSuppliers = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const fetchedSuppliers: Supplier[] = await currentDb.select('SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers ORDER BY name');
+      setSuppliers(fetchedSuppliers);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات الموردين.", variant: "destructive" });
+      setSuppliers([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setNewSupplierData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
     if (!newSupplierData.name) {
       toast({ title: "خطأ", description: "اسم المورد مطلوب.", variant: "destructive" });
       return;
     }
 
-    if (editingSupplier) {
-      const updatedSupplier = { ...editingSupplier, ...newSupplierData };
-      setSuppliers(suppliers.map(sup => sup.id === editingSupplier.id ? updatedSupplier : sup));
-      const indexToUpdate = DUMMY_SUPPLIERS.findIndex(s => s.id === editingSupplier.id);
-      if (indexToUpdate !== -1) DUMMY_SUPPLIERS[indexToUpdate] = updatedSupplier;
-      toast({ title: "نجاح", description: `تم تحديث ${updatedSupplier.name}.` });
-    } else {
-      const newSupplierWithId: Supplier = {
-        ...newSupplierData,
-        id: `sup-${Date.now()}`,
-      };
-      setSuppliers([newSupplierWithId, ...suppliers]);
-      DUMMY_SUPPLIERS.unshift(newSupplierWithId);
-      toast({ title: "نجاح", description: `تمت إضافة ${newSupplierWithId.name}.` });
+    const supplierDataToSave = {
+      name: newSupplierData.name,
+      contact_person: newSupplierData.contactPerson || null,
+      phone: newSupplierData.phone || null,
+      email: newSupplierData.email || null,
+      address: newSupplierData.address || null,
+    };
+
+    try {
+      if (editingSupplier) {
+        await db.execute(
+          'UPDATE suppliers SET name = $1, contact_person = $2, phone = $3, email = $4, address = $5 WHERE id = $6',
+          [supplierDataToSave.name, supplierDataToSave.contact_person, supplierDataToSave.phone, supplierDataToSave.email, supplierDataToSave.address, editingSupplier.id]
+        );
+        toast({ title: "نجاح", description: `تم تحديث بيانات المورد ${supplierDataToSave.name}.` });
+      } else {
+        const newSupplierId = `sup-${Date.now()}`;
+        await db.execute(
+          'INSERT INTO suppliers (id, name, contact_person, phone, email, address) VALUES ($1, $2, $3, $4, $5, $6)',
+          [newSupplierId, supplierDataToSave.name, supplierDataToSave.contact_person, supplierDataToSave.phone, supplierDataToSave.email, supplierDataToSave.address]
+        );
+        toast({ title: "نجاح", description: `تمت إضافة المورد ${supplierDataToSave.name}.` });
+      }
+      setIsDialogOpen(false);
+      setEditingSupplier(null);
+      setNewSupplierData(initialNewSupplierState);
+      await fetchSuppliers(db);
+    } catch (error) {
+      console.error("Error submitting supplier:", error);
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات المورد.", variant: "destructive" });
     }
-    setIsDialogOpen(false);
-    setEditingSupplier(null);
-    setNewSupplierData(initialNewSupplierState);
   };
 
   const handleEditSupplier = (supplier: Supplier) => {
     setEditingSupplier(supplier);
-    setNewSupplierData(supplier);
+    setNewSupplierData({
+        name: supplier.name,
+        contactPerson: supplier.contactPerson || '',
+        phone: supplier.phone || '',
+        email: supplier.email || '',
+        address: supplier.address || '',
+    });
     setIsDialogOpen(true);
   };
 
-  const handleDeleteSupplier = (supplierToDelete: Supplier) => {
-    setSuppliers(suppliers.filter(sup => sup.id !== supplierToDelete.id));
-    const indexToDelete = DUMMY_SUPPLIERS.findIndex(s => s.id === supplierToDelete.id);
-    if (indexToDelete !== -1) DUMMY_SUPPLIERS.splice(indexToDelete, 1);
-    toast({ title: "نجاح", description: `تم حذف ${supplierToDelete.name}.`, variant: "destructive" });
+  const handleDeleteSupplier = async (supplierToDelete: Supplier) => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
+    try {
+      // Consider checking for related ingredients or purchase orders before deleting
+      await db.execute('DELETE FROM suppliers WHERE id = $1', [supplierToDelete.id]);
+      toast({ title: "نجاح", description: `تم حذف المورد ${supplierToDelete.name}.`, variant: "destructive" });
+      await fetchSuppliers(db);
+    } catch (error: any) {
+      console.error("Error deleting supplier:", error);
+      if (error.message && error.message.toLowerCase().includes("constraint failed")) {
+        toast({ title: "خطأ في الحذف", description: "لا يمكن حذف المورد لأنه مرتبط ببيانات أخرى (مثل مكونات أو أوامر شراء).", variant: "destructive" });
+      } else {
+        toast({ title: "خطأ في الحذف", description: "فشل حذف المورد.", variant: "destructive" });
+      }
+    }
   };
 
   const openNewSupplierDialog = () => {
@@ -120,51 +192,55 @@ export default function SuppliersPage() {
       
       <Card className="shadow-lg">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>اسم المورد</TableHead>
-                <TableHead>شخص الاتصال</TableHead>
-                <TableHead>الهاتف</TableHead>
-                <TableHead>البريد الإلكتروني</TableHead>
-                <TableHead className="text-center">الإجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {suppliers.length > 0 ? (
-                suppliers.map(supplier => (
-                  <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">
-                      <Button
-                        variant="link"
-                        onClick={() => handleViewSupplierDetails(supplier.id)}
-                        className="text-primary hover:underline p-0 h-auto"
-                      >
-                        {supplier.name}
-                      </Button>
-                    </TableCell>
-                    <TableCell>{supplier.contactPerson || '-'}</TableCell>
-                    <TableCell>{supplier.phone || '-'}</TableCell>
-                    <TableCell>{supplier.email || '-'}</TableCell>
-                    <TableCell className="text-center space-x-2 space-x-reverse">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditSupplier(supplier)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDeleteSupplier(supplier)} className="text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+          {isLoading ? (
+            <p className="text-center text-muted-foreground p-10">جارٍ تحميل بيانات الموردين...</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>اسم المورد</TableHead>
+                  <TableHead>شخص الاتصال</TableHead>
+                  <TableHead>الهاتف</TableHead>
+                  <TableHead>البريد الإلكتروني</TableHead>
+                  <TableHead className="text-center">الإجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {suppliers.length > 0 ? (
+                  suppliers.map(supplier => (
+                    <TableRow key={supplier.id}>
+                      <TableCell className="font-medium">
+                        <Button
+                          variant="link"
+                          onClick={() => handleViewSupplierDetails(supplier.id)}
+                          className="text-primary hover:underline p-0 h-auto"
+                        >
+                          {supplier.name}
+                        </Button>
+                      </TableCell>
+                      <TableCell>{supplier.contactPerson || '-'}</TableCell>
+                      <TableCell>{supplier.phone || '-'}</TableCell>
+                      <TableCell>{supplier.email || '-'}</TableCell>
+                      <TableCell className="text-center space-x-2 space-x-reverse">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditSupplier(supplier)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteSupplier(supplier)} className="text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      لا يوجد موردون مسجلون بعد.
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
-                    لا يوجد موردون مسجلون بعد.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -211,5 +287,6 @@ export default function SuppliersPage() {
     </>
   );
 }
+    
 
     
