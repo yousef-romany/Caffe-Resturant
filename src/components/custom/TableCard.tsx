@@ -13,15 +13,13 @@ import NextImage from 'next/image';
 
 interface TableCardProps {
   table: Table;
-  onStatusChange: (tableId: string, newStatus: TableStatus, associatedAction?: 'create_order') => void;
+  onStatusChange: (tableId: string, newStatus: TableStatus) => void; // Removed associatedAction
 }
 
 export function TableCard({ table, onStatusChange }: TableCardProps) {
   const router = useRouter();
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
 
-  // Generate a relative URL for the QR code.
-  // When printing, ensure the correct domain (e.g., http://localhost:3000 or your production domain) is prepended.
   const qrCodeData = `/website/menu?table_id=${table.id}&table_number=${table.number}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrCodeData)}`;
 
@@ -37,11 +35,11 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleOccupyTable = () => {
-    // Store table number in localStorage for POS page to pick up
     localStorage.setItem('pos_target_table_number', table.number);
-    localStorage.removeItem('pos_target_order_id'); // Ensure no old orderId is picked up
+    localStorage.removeItem('pos_target_order_id'); 
     localStorage.setItem('pos_action', 'new_order_for_table');
-    onStatusChange(table.id, 'مشغولة', 'create_order'); // This will also navigate to /pos via onStatusChange logic in TablesPage
+    onStatusChange(table.id, 'مشغولة');
+    router.push('/pos');
   };
   
   const handleReserveTable = () => {
@@ -49,11 +47,11 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleConfirmReservation = () => {
-    // Store table number and a potential new orderId or indicate new order action for POS
     localStorage.setItem('pos_target_table_number', table.number);
     localStorage.removeItem('pos_target_order_id');
-    localStorage.setItem('pos_action', 'new_order_for_table'); // Explicitly set for new order from reservation
-    onStatusChange(table.id, 'مشغولة', 'create_order');
+    localStorage.setItem('pos_action', 'new_order_for_table'); 
+    onStatusChange(table.id, 'مشغولة');
+    router.push('/pos');
   };
 
   const handleCancelReservation = () => {
@@ -70,8 +68,8 @@ export function TableCard({ table, onStatusChange }: TableCardProps) {
   };
 
   const handleFinishAndPay = () => {
-    // Logic for payment and then changing status. For now, just change status.
-    // POS page should handle actual payment and potentially clear table orderId before this.
+    // In a real app, POS would clear orderId from table after payment.
+    // For now, this button directly marks table for cleaning.
     onStatusChange(table.id, 'تحتاج تنظيف');
   };
 

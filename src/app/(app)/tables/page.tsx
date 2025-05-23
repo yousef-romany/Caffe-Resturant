@@ -4,10 +4,10 @@
 import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { TableCard } from '@/components/custom/TableCard';
-import { DUMMY_TABLES, DUMMY_ORDERS, type Table, type TableStatus } from '@/constants';
+import { type Table, type TableStatus } from '@/constants'; // DUMMY_TABLES removed
 import { useToast } from '@/hooks/use-toast';
 import { Table2 as TableIcon, Filter } from 'lucide-react';
-import { useRouter } from 'next/navigation'; // Removed useSearchParams as it's no longer directly used here for this flow
+import { useRouter } from 'next/navigation';
 import {
   Select,
   SelectContent,
@@ -17,70 +17,98 @@ import {
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import { TABLE_STATUSES } from '@/constants';
-
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
 export default function TablesPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [filterStatus, setFilterStatus] = useState<TableStatus | 'الكل'>('الكل');
-  const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
-    setIsClient(true);
-    // Initialize with a deep copy to allow local modifications
-    setTables(JSON.parse(JSON.stringify(DUMMY_TABLES)));
-  }, []);
-  
-
-  const handleTableStatusChange = (tableId: string, newStatus: TableStatus, associatedAction?: 'create_order') => {
-    let updatedOrderId: string | undefined = undefined;
-    let targetTableNumber: string | undefined = undefined;
-
-    setTables(prevTables =>
-      prevTables.map(table => {
-        if (table.id === tableId) {
-          targetTableNumber = table.number; // Capture table number for navigation
-          const updatedTable = { ...table, status: newStatus };
-          if (newStatus === 'مشغولة' && associatedAction === 'create_order') {
-            updatedOrderId = table.orderId || `order-${Date.now()}`; 
-            updatedTable.orderId = updatedOrderId;
-            
-            if (!table.orderId) {
-                const newOrder = {
-                  id: updatedOrderId,
-                  orderNumber: `طلب-${Date.now().toString().slice(-5)}`,
-                  items: [],
-                  subtotal: 0,
-                  totalAmount: 0,
-                  status: 'قيد الانتظار' as const,
-                  type: 'صالة' as const,
-                  tableNumber: table.number,
-                  createdAt: new Date(),
-                };
-                DUMMY_ORDERS.unshift(newOrder);
-            }
-
-          } else if (newStatus === 'متاحة' || newStatus === 'تحتاج تنظيف') {
-            updatedTable.orderId = undefined; 
-          }
-          return updatedTable;
+    async function loadDbAndFetchTables() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
         }
-        return table;
-      })
-    );
+        setDbInstance(dbInstance);
+        await fetchTables(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch tables:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات الطاولات.", variant: "destructive" });
+        setIsLoading(false);
+      }
+    }
+    loadDbAndFetchTables();
+  }, [toast]);
 
-    const table = tables.find(t => t.id === tableId);
-    toast({
-      title: `تحديث حالة الطاولة ${table?.number}`,
-      description: `تم تغيير حالة الطاولة ${table?.number} إلى ${newStatus}.`,
-    });
+  const fetchTables = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const dbTables: any[] = await currentDb.select(
+        'SELECT id, number, status, capacity, current_order_id as orderId FROM tables_info ORDER BY CAST(number AS UNSIGNED), number'
+      );
+      setTables(dbTables.map(t => ({
+        ...t,
+        capacity: Number(t.capacity) // Ensure capacity is a number
+      })));
+    } catch (error) {
+      console.error("Error fetching tables:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات الطاولات.", variant: "destructive" });
+      setTables([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    if (newStatus === 'مشغولة' && associatedAction === 'create_order' && targetTableNumber && updatedOrderId) {
-        localStorage.setItem('pos_target_table_number', targetTableNumber);
-        localStorage.setItem('pos_target_order_id', updatedOrderId);
-        localStorage.setItem('pos_action', 'edit_order'); // Or 'new_order_for_table' if always starting fresh POS for it
-        router.push('/pos');
+  const handleTableStatusChange = async (tableId: string, newStatus: TableStatus) => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
+
+    const tableToUpdateLocally = tables.find(t => t.id === tableId);
+    if (!tableToUpdateLocally) return;
+
+    let sql = 'UPDATE tables_info SET status = $1, updated_at = CURRENT_TIMESTAMP';
+    const params: any[] = [newStatus];
+    let updatedLocalOrderId: string | undefined = tableToUpdateLocally.orderId;
+
+    if (newStatus === 'متاحة' || newStatus === 'تحتاج تنظيف') {
+      sql += ', current_order_id = NULL'; // Clear current_order_id
+      updatedLocalOrderId = undefined;
+    }
+    // If status becomes 'مشغولة', current_order_id will be set by the POS page
+    // after a new order is created and associated with this table.
+
+    sql += ' WHERE id = $' + (params.length + 1);
+    params.push(tableId);
+
+    try {
+      await db.execute(sql, params);
+
+      setTables(prevTables =>
+        prevTables.map(t =>
+          t.id === tableId ? { ...t, status: newStatus, orderId: updatedLocalOrderId } : t
+        )
+      );
+
+      toast({
+        title: `تحديث حالة الطاولة ${tableToUpdateLocally.number}`,
+        description: `تم تغيير حالة الطاولة ${tableToUpdateLocally.number} إلى ${newStatus}.`,
+      });
+
+    } catch (error) {
+      console.error("Error updating table status:", error);
+      toast({ title: "خطأ", description: "فشل تحديث حالة الطاولة في قاعدة البيانات.", variant: "destructive" });
+      if (db) await fetchTables(db); // Re-fetch on error to ensure UI consistency
     }
   };
   
@@ -92,7 +120,7 @@ export default function TablesPage() {
     setFilterStatus('الكل');
   };
 
-  if (!isClient) {
+  if (isLoading) {
     return (
       <>
         <PageHeader title="إدارة الطاولات" description="عرض وتحديث حالات الطاولات في الوقت الفعلي." icon={TableIcon} />
@@ -133,13 +161,14 @@ export default function TablesPage() {
             <TableCard
               key={table.id}
               table={table}
-              onStatusChange={handleTableStatusChange}
+              onStatusChange={handleTableStatusChange} // Pass the DB-updating function
             />
           ))}
         </div>
       ) : (
          <p className="text-center text-muted-foreground py-10">
-          {filterStatus !== 'الكل' ? `لا توجد طاولات بحالة "${filterStatus}".` : "لا توجد طاولات لعرضها."}
+          {tables.length === 0 ? "لا توجد طاولات معرفة في النظام." : 
+           filterStatus !== 'الكل' ? `لا توجد طاولات بحالة "${filterStatus}".` : "لا توجد طاولات لعرضها."}
         </p>
       )}
     </>
