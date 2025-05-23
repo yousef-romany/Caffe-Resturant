@@ -76,7 +76,13 @@ export default function SuppliersPage() {
     setIsLoading(true);
     try {
       const fetchedSuppliers: Supplier[] = await currentDb.select('SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers ORDER BY name');
-      setSuppliers(fetchedSuppliers);
+      setSuppliers(fetchedSuppliers.map(s => ({
+        ...s,
+        contactPerson: s.contactPerson || undefined,
+        phone: s.phone || undefined,
+        email: s.email || undefined,
+        address: s.address || undefined,
+      })));
     } catch (error) {
       console.error("Error fetching suppliers:", error);
       toast({ title: "خطأ", description: "فشل في جلب بيانات الموردين.", variant: "destructive" });
@@ -112,7 +118,7 @@ export default function SuppliersPage() {
     try {
       if (editingSupplier) {
         await db.execute(
-          'UPDATE suppliers SET name = $1, contact_person = $2, phone = $3, email = $4, address = $5 WHERE id = $6',
+          'UPDATE suppliers SET name = $1, contact_person = $2, phone = $3, email = $4, address = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6',
           [supplierDataToSave.name, supplierDataToSave.contact_person, supplierDataToSave.phone, supplierDataToSave.email, supplierDataToSave.address, editingSupplier.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات المورد ${supplierDataToSave.name}.` });
@@ -152,13 +158,12 @@ export default function SuppliersPage() {
       return;
     }
     try {
-      // Consider checking for related ingredients or purchase orders before deleting
       await db.execute('DELETE FROM suppliers WHERE id = $1', [supplierToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف المورد ${supplierToDelete.name}.`, variant: "destructive" });
       await fetchSuppliers(db);
     } catch (error: any) {
       console.error("Error deleting supplier:", error);
-      if (error.message && error.message.toLowerCase().includes("constraint failed")) {
+      if (error.message && (error.message.toLowerCase().includes("constraint failed") || error.message.toLowerCase().includes("foreign key constraint fails"))) {
         toast({ title: "خطأ في الحذف", description: "لا يمكن حذف المورد لأنه مرتبط ببيانات أخرى (مثل مكونات أو أوامر شراء).", variant: "destructive" });
       } else {
         toast({ title: "خطأ في الحذف", description: "فشل حذف المورد.", variant: "destructive" });

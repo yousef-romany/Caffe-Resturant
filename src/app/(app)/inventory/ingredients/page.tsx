@@ -74,7 +74,7 @@ export default function IngredientsPage() {
         console.error("Failed to initialize DB or fetch data:", error);
         toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات المكونات أو الموردين.", variant: "destructive" });
       } finally {
-        setIsLoading(false); // Combined loading state should be handled
+        // setIsLoading and setIsLoadingSuppliers are handled within their respective fetch functions
       }
     }
     loadDbAndFetchData();
@@ -136,7 +136,7 @@ export default function IngredientsPage() {
       toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
       return;
     }
-    if (!newIngredientData.name || newIngredientData.stockQuantity < 0 || newIngredientData.costPerUnit <= 0) {
+    if (!newIngredientData.name || (newIngredientData.stockQuantity !== undefined && newIngredientData.stockQuantity < 0) || (newIngredientData.costPerUnit !== undefined && newIngredientData.costPerUnit <= 0)) {
       toast({ title: "خطأ", description: "الاسم، كمية صالحة (أكبر أو تساوي صفر)، وتكلفة وحدة صالحة (أكبر من صفر) مطلوبة.", variant: "destructive" });
       return;
     }
@@ -146,14 +146,14 @@ export default function IngredientsPage() {
       unit: newIngredientData.unit,
       stock_quantity: Number(newIngredientData.stockQuantity) || 0,
       cost_per_unit: Number(newIngredientData.costPerUnit) || 0,
-      low_stock_threshold: newIngredientData.lowStockThreshold !== undefined ? Number(newIngredientData.lowStockThreshold) : null,
+      low_stock_threshold: newIngredientData.lowStockThreshold !== undefined && newIngredientData.lowStockThreshold !== null ? Number(newIngredientData.lowStockThreshold) : null,
       supplier_id: newIngredientData.supplierId || null,
     };
 
     try {
       if (editingIngredient) {
         await db.execute(
-          'UPDATE ingredients SET name = $1, unit = $2, stock_quantity = $3, cost_per_unit = $4, low_stock_threshold = $5, supplier_id = $6 WHERE id = $7',
+          'UPDATE ingredients SET name = $1, unit = $2, stock_quantity = $3, cost_per_unit = $4, low_stock_threshold = $5, supplier_id = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
           [ingredientDataToSave.name, ingredientDataToSave.unit, ingredientDataToSave.stock_quantity, ingredientDataToSave.cost_per_unit, ingredientDataToSave.low_stock_threshold, ingredientDataToSave.supplier_id, editingIngredient.id]
         );
         toast({ title: "نجاح", description: `تم تحديث المكون ${ingredientDataToSave.name}.` });
@@ -199,7 +199,7 @@ export default function IngredientsPage() {
       await fetchIngredients(db);
     } catch (error: any) {
       console.error("Error deleting ingredient:", error);
-      if (error.message && error.message.toLowerCase().includes("constraint failed")) {
+      if (error.message && (error.message.toLowerCase().includes("constraint failed") || error.message.toLowerCase().includes("foreign key constraint fails"))) {
           toast({ title: "خطأ في الحذف", description: "لا يمكن حذف المكون لأنه مستخدم في عناصر قائمة أو أوامر شراء.", variant: "destructive" });
       } else {
           toast({ title: "خطأ في الحذف", description: "فشل حذف المكون.", variant: "destructive" });
@@ -239,31 +239,36 @@ export default function IngredientsPage() {
                   <TableHead className="text-center">الكمية بالمخزون</TableHead>
                   <TableHead className="text-center">تكلفة الوحدة ($)</TableHead>
                   <TableHead className="text-center">حد المخزون المنخفض</TableHead>
+                  <TableHead>المورد</TableHead>
                   <TableHead className="text-center">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ingredients.length > 0 ? (
-                  ingredients.map(ingredient => (
-                    <TableRow key={ingredient.id}>
-                      <TableCell className="font-medium">{ingredient.name}</TableCell>
-                      <TableCell>{ingredient.unit}</TableCell>
-                      <TableCell className="text-center">{ingredient.stockQuantity.toLocaleString()}</TableCell>
-                      <TableCell className="text-center">${Number(ingredient.costPerUnit).toFixed(4)}</TableCell>
-                      <TableCell className="text-center">{ingredient.lowStockThreshold?.toLocaleString() ?? '-'}</TableCell>
-                      <TableCell className="text-center space-x-2 space-x-reverse">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditIngredient(ingredient)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteIngredient(ingredient)} className="text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  ingredients.map(ingredient => {
+                    const supplierName = suppliers.find(s => s.id === ingredient.supplierId)?.name;
+                    return (
+                      <TableRow key={ingredient.id}>
+                        <TableCell className="font-medium">{ingredient.name}</TableCell>
+                        <TableCell>{ingredient.unit}</TableCell>
+                        <TableCell className="text-center">{ingredient.stockQuantity.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">${Number(ingredient.costPerUnit).toFixed(4)}</TableCell>
+                        <TableCell className="text-center">{ingredient.lowStockThreshold?.toLocaleString() ?? '-'}</TableCell>
+                        <TableCell>{supplierName || '-'}</TableCell>
+                        <TableCell className="text-center space-x-2 space-x-reverse">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditIngredient(ingredient)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteIngredient(ingredient)} className="text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       لا توجد مكونات في المخزون بعد.
                     </TableCell>
                   </TableRow>
@@ -313,10 +318,10 @@ export default function IngredientsPage() {
               <Input id="lowStockThreshold" name="lowStockThreshold" type="number" value={newIngredientData.lowStockThreshold ?? ''} onChange={handleInputChange} className="col-span-3" min="0" step="any" placeholder="اختياري" />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="supplierId" className="text-left">المورد (اختياري)</Label>
+              <Label htmlFor="supplierId" className="text-left">المورد</Label>
               <Select name="supplierId" value={newIngredientData.supplierId || "none"} onValueChange={handleSupplierChange}>
                 <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder={isLoadingSuppliers ? "جارٍ تحميل الموردين..." : "اختر المورد"} />
+                  <SelectValue placeholder={isLoadingSuppliers ? "جارٍ تحميل الموردين..." : "اختر المورد (اختياري)"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">بدون مورد محدد</SelectItem>
@@ -340,5 +345,6 @@ export default function IngredientsPage() {
     </>
   );
 }
+    
 
     

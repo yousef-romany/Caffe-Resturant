@@ -32,16 +32,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { DUMMY_PURCHASE_ORDERS, DUMMY_SUPPLIERS, DUMMY_INGREDIENTS, type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient, type IngredientUnit, type PurchaseOrderStatus, INGREDIENT_UNITS } from '@/constants';
+import { type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient as StockIngredient, type IngredientUnit, type PurchaseOrderStatus, INGREDIENT_UNITS } from '@/constants'; // Changed Ingredient to StockIngredient
 import { PlusCircle, Edit, Trash2, ListChecks, PackagePlus, X, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import NextImage from 'next/image';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
 const initialNewPurchaseOrderState: Omit<PurchaseOrder, 'id' | 'orderNumber' | 'totalAmount'> & { orderDate: string; expectedDeliveryDate?: string } = {
   supplierId: '',
-  supplierName: '', // Will be populated based on supplierId
+  supplierName: '', 
   items: [],
   status: 'معلق',
   orderDate: new Date().toISOString().split('T')[0],
@@ -52,21 +54,119 @@ const initialNewPurchaseOrderState: Omit<PurchaseOrder, 'id' | 'orderNumber' | '
 const PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ['معلق', 'مؤكد', 'مستلم', 'ملغى'];
 
 export default function PurchaseOrdersPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
+  const [isLoadingIngredients, setIsLoadingIngredients] = useState(true);
+
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [newPurchaseOrderData, setNewPurchaseOrderData] = useState(initialNewPurchaseOrderState);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]); // Changed from ingredients
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingPurchaseOrder, setViewingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    setPurchaseOrders(DUMMY_PURCHASE_ORDERS.sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()));
-    setSuppliers(DUMMY_SUPPLIERS);
-    setIngredients(DUMMY_INGREDIENTS);
-  }, []);
+    async function loadDbAndFetchData() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          setIsLoadingSuppliers(false);
+          setIsLoadingIngredients(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        await Promise.all([
+          fetchPurchaseOrders(dbInstance),
+          fetchSuppliers(dbInstance),
+          fetchStockIngredients(dbInstance)
+        ]);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات أوامر الشراء أو البيانات المرتبطة.", variant: "destructive" });
+      } finally {
+        // Overall loading state can be more complex if needed, or just wait for all.
+        setIsLoading(false); // Assume main data loading is POs
+      }
+    }
+    loadDbAndFetchData();
+  }, [toast]);
+
+  const fetchPurchaseOrders = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const fetchedPOs: any[] = await currentDb.select(
+        'SELECT id, order_number as orderNumber, supplier_id as supplierId, supplier_name as supplierName, total_amount as totalAmount, status, order_date as orderDate, expected_delivery_date as expectedDeliveryDate, received_date as receivedDate, notes FROM purchase_orders ORDER BY order_date DESC'
+      );
+      const posWithItems = await Promise.all(fetchedPOs.map(async (po) => {
+        const itemsRaw: any[] = await currentDb.select(
+          'SELECT ingredient_id as ingredientId, ingredient_name as ingredientName, quantity, cost_per_unit_at_purchase as costPerUnit, unit_at_purchase as unit FROM purchase_order_items WHERE purchase_order_id = $1',
+          [po.id]
+        );
+        const items: PurchaseOrderItem[] = itemsRaw.map(item => ({
+          ...item,
+          quantity: Number(item.quantity),
+          costPerUnit: Number(item.costPerUnit),
+        }));
+        return { 
+          ...po, 
+          items,
+          totalAmount: Number(po.totalAmount),
+          orderDate: po.orderDate ? parseISO(po.orderDate) : new Date(),
+          expectedDeliveryDate: po.expectedDeliveryDate ? parseISO(po.expectedDeliveryDate) : undefined,
+          receivedDate: po.receivedDate ? parseISO(po.receivedDate) : undefined,
+        };
+      }));
+      setPurchaseOrders(posWithItems);
+    } catch (error) {
+      console.error("Error fetching purchase orders:", error);
+      toast({ title: "خطأ", description: "فشل في جلب أوامر الشراء.", variant: "destructive" });
+      setPurchaseOrders([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchSuppliers = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoadingSuppliers(true);
+    try {
+      const fetchedSuppliers: Supplier[] = await currentDb.select('SELECT id, name FROM suppliers ORDER BY name');
+      setSuppliers(fetchedSuppliers);
+    } catch (error) {
+      console.error("Error fetching suppliers:", error);
+      toast({ title: "خطأ", description: "فشل في جلب قائمة الموردين.", variant: "destructive" });
+      setSuppliers([]);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
+
+  const fetchStockIngredients = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoadingIngredients(true);
+    try {
+      const fetchedIngredients: StockIngredient[] = await currentDb.select(
+        'SELECT id, name, unit, cost_per_unit as costPerUnit FROM ingredients ORDER BY name' // Assuming StockIngredient type matches
+      );
+      setStockIngredients(fetchedIngredients.map(ing => ({
+        ...ing,
+        costPerUnit: Number(ing.costPerUnit)
+      })));
+    } catch (error) {
+      console.error("Error fetching stock ingredients:", error);
+      toast({ title: "خطأ", description: "فشل في جلب قائمة المكونات.", variant: "destructive" });
+      setStockIngredients([]);
+    } finally {
+      setIsLoadingIngredients(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -99,7 +199,7 @@ export default function PurchaseOrdersPage() {
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
           if (field === 'ingredientId') {
-            const selectedIngredient = ingredients.find(ing => ing.id === value);
+            const selectedIngredient = stockIngredients.find(ing => ing.id === value);
             updatedItem.ingredientName = selectedIngredient ? selectedIngredient.name : '';
             updatedItem.unit = selectedIngredient ? selectedIngredient.unit : INGREDIENT_UNITS[0];
             updatedItem.costPerUnit = selectedIngredient ? selectedIngredient.costPerUnit : 0;
@@ -133,7 +233,11 @@ export default function PurchaseOrdersPage() {
     return items.reduce((sum, item) => sum + (item.quantity * item.costPerUnit), 0);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
     if (!newPurchaseOrderData.supplierId || newPurchaseOrderData.items.length === 0) {
       toast({ title: "خطأ", description: "يجب تحديد مورد وإضافة عنصر واحد على الأقل.", variant: "destructive" });
       return;
@@ -146,51 +250,86 @@ export default function PurchaseOrdersPage() {
     }
 
     const totalAmount = calculateTotalAmount(newPurchaseOrderData.items);
-    const purchaseOrderDataToSave : Omit<PurchaseOrder, 'id' | 'orderNumber'> = {
-        ...newPurchaseOrderData,
-        orderDate: new Date(newPurchaseOrderData.orderDate),
-        expectedDeliveryDate: newPurchaseOrderData.expectedDeliveryDate ? new Date(newPurchaseOrderData.expectedDeliveryDate) : undefined,
-        totalAmount,
+    
+    const poDataToSave = {
+        supplier_id: newPurchaseOrderData.supplierId,
+        supplier_name: newPurchaseOrderData.supplierName,
+        total_amount: totalAmount,
+        status: newPurchaseOrderData.status,
+        order_date: newPurchaseOrderData.orderDate ? format(new Date(newPurchaseOrderData.orderDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        expected_delivery_date: newPurchaseOrderData.expectedDeliveryDate ? format(new Date(newPurchaseOrderData.expectedDeliveryDate), 'yyyy-MM-dd') : null,
+        received_date: newPurchaseOrderData.status === 'مستلم' && newPurchaseOrderData.receivedDate ? format(new Date(newPurchaseOrderData.receivedDate), 'yyyy-MM-dd') : (newPurchaseOrderData.status === 'مستلم' && !newPurchaseOrderData.receivedDate ? format(new Date(), 'yyyy-MM-dd') : null),
+        notes: newPurchaseOrderData.notes || null,
     };
 
-
-    if (editingPurchaseOrder) {
-      const updatedPurchaseOrder = { ...editingPurchaseOrder, ...purchaseOrderDataToSave };
-      setPurchaseOrders(purchaseOrders.map(po => po.id === editingPurchaseOrder.id ? updatedPurchaseOrder : po));
-      // Update DUMMY_PURCHASE_ORDERS if it's being used directly
-      const indexToUpdate = DUMMY_PURCHASE_ORDERS.findIndex(p => p.id === editingPurchaseOrder.id);
-      if (indexToUpdate !== -1) DUMMY_PURCHASE_ORDERS[indexToUpdate] = updatedPurchaseOrder;
-      toast({ title: "نجاح", description: `تم تحديث أمر الشراء ${updatedPurchaseOrder.orderNumber}.` });
-    } else {
-      const newPurchaseOrderWithId: PurchaseOrder = {
-        ...purchaseOrderDataToSave,
-        id: `po-${Date.now()}`,
-        orderNumber: `PO-${Date.now().toString().slice(-5)}`,
-      };
-      setPurchaseOrders([newPurchaseOrderWithId, ...purchaseOrders]);
-      DUMMY_PURCHASE_ORDERS.unshift(newPurchaseOrderWithId);
-      toast({ title: "نجاح", description: `تم إنشاء أمر الشراء ${newPurchaseOrderWithId.orderNumber}.` });
+    try {
+      if (editingPurchaseOrder) {
+        await db.execute(
+          'UPDATE purchase_orders SET supplier_id=$1, supplier_name=$2, total_amount=$3, status=$4, order_date=$5, expected_delivery_date=$6, received_date=$7, notes=$8, updated_at=CURRENT_TIMESTAMP WHERE id=$9',
+          [poDataToSave.supplier_id, poDataToSave.supplier_name, poDataToSave.total_amount, poDataToSave.status, poDataToSave.order_date, poDataToSave.expected_delivery_date, poDataToSave.received_date, poDataToSave.notes, editingPurchaseOrder.id]
+        );
+        // Delete old items and insert new ones
+        await db.execute('DELETE FROM purchase_order_items WHERE purchase_order_id=$1', [editingPurchaseOrder.id]);
+        for (const item of newPurchaseOrderData.items) {
+          const newItemId = `poi-${Date.now()}-${item.ingredientId}`;
+          await db.execute(
+            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [newItemId, editingPurchaseOrder.id, item.ingredientId, item.ingredientName, item.quantity, item.costPerUnit, item.unit]
+          );
+        }
+        toast({ title: "نجاح", description: `تم تحديث أمر الشراء.` });
+      } else {
+        const newPOId = `po-${Date.now()}`;
+        const newPONumber = `PO-${Date.now().toString().slice(-5)}`;
+        await db.execute(
+          'INSERT INTO purchase_orders (id, order_number, supplier_id, supplier_name, total_amount, status, order_date, expected_delivery_date, received_date, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          [newPOId, newPONumber, poDataToSave.supplier_id, poDataToSave.supplier_name, poDataToSave.total_amount, poDataToSave.status, poDataToSave.order_date, poDataToSave.expected_delivery_date, poDataToSave.received_date, poDataToSave.notes]
+        );
+        for (const item of newPurchaseOrderData.items) {
+           const newItemId = `poi-${Date.now()}-${item.ingredientId}`;
+          await db.execute(
+            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [newItemId, newPOId, item.ingredientId, item.ingredientName, item.quantity, item.costPerUnit, item.unit]
+          );
+        }
+        toast({ title: "نجاح", description: `تم إنشاء أمر الشراء ${newPONumber}.` });
+      }
+      setIsDialogOpen(false);
+      setEditingPurchaseOrder(null);
+      setNewPurchaseOrderData(initialNewPurchaseOrderState);
+      await fetchPurchaseOrders(db);
+    } catch (error) {
+      console.error("Error submitting purchase order:", error);
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات أمر الشراء.", variant: "destructive" });
     }
-    setIsDialogOpen(false);
-    setEditingPurchaseOrder(null);
-    setNewPurchaseOrderData(initialNewPurchaseOrderState);
   };
 
   const handleEditPurchaseOrder = (po: PurchaseOrder) => {
     setEditingPurchaseOrder(po);
     setNewPurchaseOrderData({
-        ...po,
+        supplierId: po.supplierId,
+        supplierName: po.supplierName,
+        items: po.items.map(item => ({...item})), // Deep copy items
+        status: po.status,
         orderDate: format(new Date(po.orderDate), 'yyyy-MM-dd'),
         expectedDeliveryDate: po.expectedDeliveryDate ? format(new Date(po.expectedDeliveryDate), 'yyyy-MM-dd') : '',
+        receivedDate: po.receivedDate ? format(new Date(po.receivedDate), 'yyyy-MM-dd') : '',
+        notes: po.notes || '',
     });
     setIsDialogOpen(true);
   };
 
-  const handleDeletePurchaseOrder = (poToDelete: PurchaseOrder) => {
-    setPurchaseOrders(purchaseOrders.filter(po => po.id !== poToDelete.id));
-    const indexToDelete = DUMMY_PURCHASE_ORDERS.findIndex(p => p.id === poToDelete.id);
-    if (indexToDelete !== -1) DUMMY_PURCHASE_ORDERS.splice(indexToDelete, 1);
-    toast({ title: "نجاح", description: `تم حذف أمر الشراء ${poToDelete.orderNumber}.`, variant: "destructive" });
+  const handleDeletePurchaseOrder = async (poToDelete: PurchaseOrder) => {
+    if (!db) return;
+    try {
+      await db.execute('DELETE FROM purchase_orders WHERE id = $1', [poToDelete.id]);
+      // purchase_order_items should be deleted by CASCADE constraint
+      toast({ title: "نجاح", description: `تم حذف أمر الشراء ${poToDelete.orderNumber}.`, variant: "destructive" });
+      await fetchPurchaseOrders(db);
+    } catch (error) {
+        console.error("Error deleting purchase order:", error);
+        toast({ title: "خطأ في الحذف", description: "فشل حذف أمر الشراء.", variant: "destructive" });
+    }
   };
 
   const openNewPurchaseOrderDialog = () => {
@@ -202,16 +341,6 @@ export default function PurchaseOrdersPage() {
   const handleViewPurchaseOrder = (po: PurchaseOrder) => {
     setViewingPurchaseOrder(po);
     setIsViewDialogOpen(true);
-  };
-
-  const getStatusBadgeVariant = (status: PurchaseOrder['status']) => {
-    switch (status) {
-      case 'مستلم': return 'default'; // Green
-      case 'مؤكد': return 'secondary'; // Blueish
-      case 'معلق': return 'outline'; // Yellowish/Orange
-      case 'ملغى': return 'destructive'; // Red
-      default: return 'outline';
-    }
   };
   
   const displayedTotalAmount = useMemo(() => {
@@ -233,6 +362,9 @@ export default function PurchaseOrdersPage() {
       
       <Card className="shadow-lg">
         <CardContent className="p-0">
+        {isLoading ? (
+            <p className="text-center text-muted-foreground p-10">جارٍ تحميل أوامر الشراء...</p>
+        ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -282,13 +414,14 @@ export default function PurchaseOrdersPage() {
               )}
             </TableBody>
           </Table>
+        )}
         </CardContent>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingPurchaseOrder ? 'تعديل أمر الشراء' : 'إنشاء أمر شراء جديد'}</DialogTitle>
+            <DialogTitle>{editingPurchaseOrder ? `تعديل أمر الشراء: ${editingPurchaseOrder.orderNumber}` : 'إنشاء أمر شراء جديد'}</DialogTitle>
             <DialogDescription>
               {editingPurchaseOrder ? 'قم بتحديث تفاصيل أمر الشراء هذا.' : 'املأ تفاصيل أمر الشراء الجديد.'}
             </DialogDescription>
@@ -297,9 +430,9 @@ export default function PurchaseOrdersPage() {
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <Label htmlFor="supplierId">المورد</Label>
-                    <Select name="supplierId" value={newPurchaseOrderData.supplierId} onValueChange={handleSupplierChange}>
+                    <Select name="supplierId" value={newPurchaseOrderData.supplierId} onValueChange={handleSupplierChange} disabled={isLoadingSuppliers}>
                         <SelectTrigger id="supplierId">
-                        <SelectValue placeholder="اختر المورد" />
+                        <SelectValue placeholder={isLoadingSuppliers ? "جارٍ تحميل الموردين..." : "اختر المورد"} />
                         </SelectTrigger>
                         <SelectContent>
                         {suppliers.map(sup => (
@@ -332,6 +465,12 @@ export default function PurchaseOrdersPage() {
                     </Select>
                 </div>
             </div>
+             {newPurchaseOrderData.status === 'مستلم' && (
+                 <div>
+                    <Label htmlFor="receivedDate">تاريخ الاستلام</Label>
+                    <Input id="receivedDate" name="receivedDate" type="date" value={(newPurchaseOrderData as any).receivedDate || ''} onChange={handleInputChange} />
+                 </div>
+             )}
              <div>
                 <Label htmlFor="notes">ملاحظات</Label>
                 <Textarea id="notes" name="notes" value={newPurchaseOrderData.notes || ''} onChange={handleInputChange} placeholder="اختياري"/>
@@ -342,12 +481,12 @@ export default function PurchaseOrdersPage() {
               <div key={index} className="grid grid-cols-12 items-end gap-2 p-3 border rounded-md">
                 <div className="col-span-4">
                   <Label htmlFor={`ingredientId-${index}`}>المكون</Label>
-                  <Select value={item.ingredientId} onValueChange={(value) => handlePOItemChange(index, 'ingredientId', value)}>
+                  <Select value={item.ingredientId} onValueChange={(value) => handlePOItemChange(index, 'ingredientId', value)} disabled={isLoadingIngredients}>
                     <SelectTrigger id={`ingredientId-${index}`}>
-                      <SelectValue placeholder="اختر المكون" />
+                      <SelectValue placeholder={isLoadingIngredients ? "جارٍ تحميل المكونات..." : "اختر المكون"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {ingredients.map(ing => (
+                      {stockIngredients.map(ing => (
                         <SelectItem key={ing.id} value={ing.id}>{ing.name} ({ing.unit})</SelectItem>
                       ))}
                     </SelectContent>
@@ -382,7 +521,7 @@ export default function PurchaseOrdersPage() {
                 </div>
               </div>
             ))}
-            <Button type="button" variant="outline" onClick={handleAddItemToPO} className="mt-2">
+            <Button type="button" variant="outline" onClick={handleAddItemToPO} className="mt-2" disabled={isLoadingIngredients}>
               <PackagePlus className="h-4 w-4 me-2" /> إضافة عنصر للطلب
             </Button>
             <div className="mt-4 text-left font-semibold text-lg">
@@ -400,7 +539,6 @@ export default function PurchaseOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* View Purchase Order Dialog */}
       {viewingPurchaseOrder && (
          <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
             <DialogContent className="sm:max-w-lg">
@@ -449,3 +587,4 @@ export default function PurchaseOrdersPage() {
   );
 }
 
+    

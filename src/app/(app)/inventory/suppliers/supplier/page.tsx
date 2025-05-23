@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { type Supplier, type PurchaseOrder, type PurchaseOrderStatus } from '@/constants'; // Keep type imports
+import { type Supplier, type PurchaseOrder, type PurchaseOrderStatus } from '@/constants';
 import { Users, ListChecks, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -33,7 +33,7 @@ export default function SupplierDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [db, setDbInstance] = useState<Database | null>(null);
-  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [supplierIdState, setSupplierIdState] = useState<string | null>(null); // Renamed to avoid conflict with possible future prop
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
@@ -48,7 +48,7 @@ export default function SupplierDetailPage() {
     async function initializePage() {
       const idFromStorage = localStorage.getItem('selectedSupplierId');
       if (idFromStorage) {
-        setSupplierId(idFromStorage);
+        setSupplierIdState(idFromStorage);
       } else {
         setIsLoading(false);
         toast({ title: "لم يتم تحديد مورد", description: "الرجاء اختيار مورد من القائمة.", variant: "destructive"});
@@ -74,24 +74,30 @@ export default function SupplierDetailPage() {
 
   useEffect(() => {
     async function fetchSupplierAndPOs() {
-      if (db && supplierId) {
+      if (db && supplierIdState) {
         setIsLoading(true);
         try {
           const foundSupplierResult: Supplier[] = await db.select(
             'SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers WHERE id = $1', 
-            [supplierId]
+            [supplierIdState]
           );
           
           if (foundSupplierResult.length > 0) {
-            setSupplier(foundSupplierResult[0]);
+            setSupplier({
+              ...foundSupplierResult[0],
+              contactPerson: foundSupplierResult[0].contactPerson || undefined,
+              phone: foundSupplierResult[0].phone || undefined,
+              email: foundSupplierResult[0].email || undefined,
+              address: foundSupplierResult[0].address || undefined,
+            });
 
             const supplierPOsResult: any[] = await db.select(
               'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, order_date as orderDate, supplier_name as supplierName FROM purchase_orders WHERE supplier_id = $1 ORDER BY order_date DESC',
-              [supplierId]
+              [supplierIdState]
             );
             setPurchaseOrders(supplierPOsResult.map(po => ({
               ...po,
-              orderDate: po.orderDate ? parseISO(po.orderDate) : new Date(), // Ensure orderDate is Date
+              orderDate: po.orderDate ? parseISO(po.orderDate) : new Date(),
               totalAmount: Number(po.totalAmount) || 0,
               items: [] // Items are not fetched here for simplicity
             })));
@@ -99,7 +105,7 @@ export default function SupplierDetailPage() {
           } else {
             setSupplier(null); 
             setPurchaseOrders([]);
-            toast({ title: "لم يتم العثور على المورد", description: `المورد بالمعرف ${supplierId} غير موجود.`, variant: "destructive"});
+            toast({ title: "لم يتم العثور على المورد", description: `المورد بالمعرف ${supplierIdState} غير موجود.`, variant: "destructive"});
           }
         } catch (error) {
           console.error("Error fetching supplier details or POs:", error);
@@ -110,12 +116,13 @@ export default function SupplierDetailPage() {
           setIsLoading(false);
           localStorage.removeItem('selectedSupplierId'); // Clear after fetching
         }
-      } else if (!supplierId && !isLoading) {
+      } else if (!supplierIdState && !isLoading) { // Ensure isLoading is false if no supplierIdState
         setIsLoading(false);
       }
     }
     fetchSupplierAndPOs();
-  }, [db, supplierId, toast, isLoading]);
+  }, [db, supplierIdState, toast]); // Removed isLoading from dependency array to prevent re-fetch loops
+
 
   const availableYears = useMemo(() => {
     const years = new Set(purchaseOrders.map(po => getYear(new Date(po.orderDate)).toString()));
