@@ -9,46 +9,87 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from '@/components/ui/badge';
 import { CalendarClock, LogIn, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { DUMMY_ATTENDANCE_RECORDS, DUMMY_EMPLOYEES, type AttendanceRecord, type Employee } from '@/constants';
-import { format, differenceInHours, differenceInMinutes, startOfDay, isToday } from 'date-fns';
+import type { AttendanceRecord, Employee } from '@/constants';
+import { format, differenceInHours, differenceInMinutes, startOfDay, isToday, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
 
-// For simplicity, let's assume a currently logged-in employee
 const CURRENT_EMPLOYEE_ID = 'emp3'; // محمد عبدالله
 
 export default function AttendancePage() {
   const { toast } = useToast();
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [employeeName, setEmployeeName] = useState<string>('');
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(DUMMY_ATTENDANCE_RECORDS);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
   const [isClockedIn, setIsClockedIn] = useState<boolean>(false);
   const [activeClockInId, setActiveClockInId] = useState<string | null>(null);
 
   useEffect(() => {
-    const currentEmployee = DUMMY_EMPLOYEES.find(emp => emp.id === CURRENT_EMPLOYEE_ID);
-    if (currentEmployee) {
-      setEmployeeName(currentEmployee.name);
+    async function initializeAndFetchData() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        await fetchEmployeeAndAttendanceData(dbInstance);
+      } catch (error) {
+        console.error("Error initializing DB or fetching data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات الحضور.", variant: "destructive" });
+        setIsLoading(false);
+      }
     }
+    initializeAndFetchData();
+  }, [toast]); // Re-fetch if db instance changes or toast changes (though toast is stable)
 
-    const employeeRecords = attendanceRecords.filter(
-      (record) => record.employeeId === CURRENT_EMPLOYEE_ID
-    );
+  const fetchEmployeeAndAttendanceData = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      const employeeResult: Employee[] = await currentDb.select("SELECT name FROM employees WHERE id = $1", [CURRENT_EMPLOYEE_ID]);
+      if (employeeResult.length > 0) {
+        setEmployeeName(employeeResult[0].name);
+      } else {
+        setEmployeeName("موظف غير معروف");
+      }
 
-    const todayRecords = employeeRecords.filter((record) =>
-      isToday(new Date(record.attendanceDate))
-    );
-    setTodayAttendance(todayRecords.sort((a, b) => new Date(b.clockInTime).getTime() - new Date(a.clockInTime).getTime()));
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const attendanceResult: any[] = await currentDb.select(
+        "SELECT id, clock_in_time, clock_out_time, attendance_date, work_duration_hours FROM employee_attendance WHERE employee_id = $1 AND attendance_date = $2 ORDER BY clock_in_time DESC",
+        [CURRENT_EMPLOYEE_ID, todayStr]
+      );
+      
+      const fetchedRecords: AttendanceRecord[] = attendanceResult.map(r => ({
+        id: r.id,
+        employeeId: CURRENT_EMPLOYEE_ID,
+        clockInTime: parseISO(r.clock_in_time),
+        clockOutTime: r.clock_out_time ? parseISO(r.clock_out_time) : undefined,
+        attendanceDate: parseISO(r.attendance_date),
+        workDurationHours: r.work_duration_hours ? parseFloat(r.work_duration_hours) : undefined,
+      }));
+      
+      setTodayAttendance(fetchedRecords);
 
-    const lastRecordToday = todayRecords.length > 0 ? todayRecords[0] : null;
-
-    if (lastRecordToday && lastRecordToday.clockInTime && !lastRecordToday.clockOutTime) {
-      setIsClockedIn(true);
-      setActiveClockInId(lastRecordToday.id);
-    } else {
-      setIsClockedIn(false);
-      setActiveClockInId(null);
+      const lastRecordToday = fetchedRecords.length > 0 ? fetchedRecords[0] : null;
+      if (lastRecordToday && lastRecordToday.clockInTime && !lastRecordToday.clockOutTime) {
+        setIsClockedIn(true);
+        setActiveClockInId(lastRecordToday.id);
+      } else {
+        setIsClockedIn(false);
+        setActiveClockInId(null);
+      }
+    } catch (error) {
+      console.error("Error fetching attendance data:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات الحضور.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-  }, [attendanceRecords]);
+  };
+
 
   const formatWorkDuration = (clockIn: Date, clockOut?: Date): string => {
     if (!clockOut) return '-';
@@ -58,76 +99,93 @@ export default function AttendancePage() {
     return `${hours} س ${minutes} د`;
   };
 
-  const handleClockIn = () => {
+  const handleClockIn = async () => {
+    if (!db) {
+        toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+        return;
+    }
     if (isClockedIn) {
-      toast({
-        title: "خطأ",
-        description: "أنت مسجل حضور بالفعل.",
-        variant: "destructive",
-      });
+      toast({ title: "خطأ", description: "أنت مسجل حضور بالفعل.", variant: "destructive" });
       return;
     }
 
     const now = new Date();
-    const newRecord: AttendanceRecord = {
-      id: `att-${Date.now()}`,
-      employeeId: CURRENT_EMPLOYEE_ID,
-      clockInTime: now,
-      attendanceDate: startOfDay(now),
-    };
+    const newRecordId = `att-${Date.now()}`;
+    const attendanceDateStr = format(startOfDay(now), 'yyyy-MM-dd');
+    const clockInTimeStr = now.toISOString();
 
-    // Update the dummy data array (simulating backend update)
-    DUMMY_ATTENDANCE_RECORDS.unshift(newRecord);
-    setAttendanceRecords([...DUMMY_ATTENDANCE_RECORDS]); // Trigger re-render
-
-    setIsClockedIn(true);
-    setActiveClockInId(newRecord.id);
-    toast({
-      title: "تم تسجيل الحضور بنجاح",
-      description: `وقت الحضور: ${format(now, 'p', { locale: arSA })}`,
-      className: "bg-green-500 text-white",
-    });
+    try {
+      await db.execute(
+        "INSERT INTO employee_attendance (id, employee_id, clock_in_time, attendance_date) VALUES ($1, $2, $3, $4)",
+        [newRecordId, CURRENT_EMPLOYEE_ID, clockInTimeStr, attendanceDateStr]
+      );
+      
+      setIsClockedIn(true);
+      setActiveClockInId(newRecordId);
+      toast({
+        title: "تم تسجيل الحضور بنجاح",
+        description: `وقت الحضور: ${format(now, 'p', { locale: arSA })}`,
+        className: "bg-green-500 text-white",
+      });
+      await fetchEmployeeAndAttendanceData(db); // Refresh data
+    } catch (error) {
+        console.error("Error clocking in:", error);
+        toast({ title: "خطأ في تسجيل الحضور", description: "فشل حفظ سجل الحضور.", variant: "destructive"});
+    }
   };
 
-  const handleClockOut = () => {
+  const handleClockOut = async () => {
+    if (!db) {
+        toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+        return;
+    }
     if (!isClockedIn || !activeClockInId) {
-      toast({
-        title: "خطأ",
-        description: "يجب تسجيل الحضور أولاً.",
-        variant: "destructive",
-      });
+      toast({ title: "خطأ", description: "يجب تسجيل الحضور أولاً.", variant: "destructive" });
       return;
     }
 
     const now = new Date();
-    const recordIndex = DUMMY_ATTENDANCE_RECORDS.findIndex(r => r.id === activeClockInId);
+    const activeRecord = todayAttendance.find(r => r.id === activeClockInId);
 
-    if (recordIndex !== -1) {
-      const recordToUpdate = DUMMY_ATTENDANCE_RECORDS[recordIndex];
-      recordToUpdate.clockOutTime = now;
-      const durationHours = differenceInHours(now, new Date(recordToUpdate.clockInTime));
-      const durationMinutes = differenceInMinutes(now, new Date(recordToUpdate.clockInTime)) % 60;
-      recordToUpdate.workDurationHours = parseFloat(`${durationHours}.${durationMinutes}`);
+    if (activeRecord) {
+      const clockInDate = new Date(activeRecord.clockInTime);
+      const totalMinutesWorked = differenceInMinutes(now, clockInDate);
+      const hoursWorked = Math.floor(totalMinutesWorked / 60);
+      const minutesWorked = totalMinutesWorked % 60;
+      const workDuration = parseFloat((hoursWorked + (minutesWorked / 60)).toFixed(2));
+      const clockOutTimeStr = now.toISOString();
 
+      try {
+        await db.execute(
+          "UPDATE employee_attendance SET clock_out_time = $1, work_duration_hours = $2 WHERE id = $3",
+          [clockOutTimeStr, workDuration, activeClockInId]
+        );
 
-      DUMMY_ATTENDANCE_RECORDS[recordIndex] = recordToUpdate;
-      setAttendanceRecords([...DUMMY_ATTENDANCE_RECORDS]); // Trigger re-render
-
-      setIsClockedIn(false);
-      setActiveClockInId(null);
-      toast({
-        title: "تم تسجيل الانصراف بنجاح",
-        description: `وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(new Date(recordToUpdate.clockInTime), now)}.`,
-        className: "bg-red-500 text-white",
-      });
+        setIsClockedIn(false);
+        setActiveClockInId(null);
+        toast({
+          title: "تم تسجيل الانصراف بنجاح",
+          description: `وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(clockInDate, now)}.`,
+          className: "bg-red-500 text-white",
+        });
+        await fetchEmployeeAndAttendanceData(db); // Refresh data
+      } catch (error) {
+        console.error("Error clocking out:", error);
+        toast({ title: "خطأ في تسجيل الانصراف", description: "فشل تحديث سجل الحضور.", variant: "destructive"});
+      }
     } else {
-      toast({
-        title: "خطأ",
-        description: "لم يتم العثور على سجل الحضور النشط.",
-        variant: "destructive",
-      });
+      toast({ title: "خطأ", description: "لم يتم العثور على سجل الحضور النشط.", variant: "destructive" });
     }
   };
+  
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="سجل الحضور والانصراف" description="جارٍ تحميل البيانات..." icon={CalendarClock} />
+        <p className="text-center p-4">يرجى الانتظار...</p>
+      </>
+    );
+  }
 
   return (
     <>
