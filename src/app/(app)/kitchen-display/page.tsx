@@ -14,7 +14,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // usePathname for re-triggering useEffect
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 
@@ -23,8 +23,8 @@ const PREPARING_LATE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
 interface KitchenOrderCardProps {
   order: Order;
-  onStartPreparing: (orderId: string, newStatus: OrderStatus) => void; // Pass newStatus
-  onMarkAsReady: (orderId: string, newStatus: OrderStatus) => void; // Pass newStatus
+  onStartPreparing: (orderId: string, newStatus: OrderStatus) => void;
+  onMarkAsReady: (orderId: string, newStatus: OrderStatus) => void;
   displayCategory: Category;
   isLate: boolean;
 }
@@ -85,7 +85,7 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
       <ScrollArea className="flex-grow">
         <CardContent className="py-0 ">
           <ul className="space-y-2">
-            {itemsToDisplay.map((item, index) => ( // Added index for key uniqueness if notes are null
+            {itemsToDisplay.map((item, index) => (
               <li key={`${item.id}-${item.notes || 'no-notes'}-${index}`} className="flex items-start gap-2 p-2 border-b last:border-b-0">
                 <NextImage src={item.imageUrl || 'https://placehold.co/50x50.png'} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
                 <div className="flex-grow">
@@ -118,7 +118,7 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
 
 export default function KitchenDisplayPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const pathname = usePathname(); // To re-trigger useEffect on navigation to this page
   const { toast } = useToast();
 
   const [db, setDbInstance] = useState<Database | null>(null);
@@ -126,7 +126,7 @@ export default function KitchenDisplayPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategorySlug, setActiveCategorySlug] = useState<CategorySlug | null>(null);
   const [activeCategoryInfo, setActiveCategoryInfo] = useState<{ name: Category; icon: LucideIcon; slug: CategorySlug } | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(true); // Assume authorized until checked
 
   const fetchOrdersForCategory = useCallback(async (categoryName: Category, currentDb: Database) => {
     if (!currentDb) return;
@@ -159,10 +159,10 @@ export default function KitchenDisplayPage() {
         );
 
         const items: OrderItem[] = itemsRaw.map(item => ({
-          id: item.id, // This is menu_item_id
-          name: item.name, // This is menu_item_name
-          category: item.category as Category, // From menu_items table
-          price: Number(item.price), // price_at_order
+          id: item.id,
+          name: item.name,
+          category: item.category as Category,
+          price: Number(item.price),
           quantity: Number(item.quantity),
           imageUrl: item.imageUrl || 'https://placehold.co/50x50.png',
           dataAiHint: item.dataAiHint || 'food item',
@@ -177,9 +177,10 @@ export default function KitchenDisplayPage() {
             status: orderRaw.status as OrderStatus,
             createdAt: parseISO(orderRaw.created_at),
             kitchen_started_at: orderRaw.kitchen_started_at ? parseISO(orderRaw.kitchen_started_at) : undefined,
+            kitchen_ready_at: orderRaw.kitchen_ready_at ? parseISO(orderRaw.kitchen_ready_at) : undefined,
             tableNumber: orderRaw.table_id ? tableNumberMap[orderRaw.table_id] : undefined,
             items: items,
-            totalAmount: 0, // Placeholder for kitchen display context
+            totalAmount: 0, 
           });
         }
       }
@@ -198,60 +199,73 @@ export default function KitchenDisplayPage() {
       const dbInstance = await getDb();
       setDbInstance(dbInstance);
 
-      const categoryParam = searchParams.get('category') as CategorySlug | null;
-      let slugToLoad: CategorySlug | null = categoryParam;
+      let slugToLoad: CategorySlug | null = null;
       let categoryInfo: { name: Category; icon: LucideIcon; slug: CategorySlug } | null = null;
 
-      if (slugToLoad) {
-        categoryInfo = CATEGORY_SLUG_MAP[slugToLoad] || null;
-      } else {
-        const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
-        if (storedSlug) {
-          slugToLoad = storedSlug;
-          categoryInfo = CATEGORY_SLUG_MAP[slugToLoad] || null;
-        }
+      // 1. Try to load from localStorage
+      const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
+      if (storedSlug && CATEGORY_SLUG_MAP[storedSlug]) {
+        slugToLoad = storedSlug;
+        categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
       }
-      
+
+      // Helper to check authorization
       const isUserAuthorizedForCategory = (catInfo: typeof categoryInfo) => {
         if (!catInfo) return false;
         return CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length === 0 || 
                CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(catInfo.name);
       };
 
+      // 2. If localStorage value is not valid or not authorized, determine a default
       if (!categoryInfo || !isUserAuthorizedForCategory(categoryInfo)) {
-        const fallbackSlug = CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0
-          ? Object.values(CATEGORY_SLUG_MAP).find(c => CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(c.name))?.slug
-          : Object.values(CATEGORY_SLUG_MAP)[0]?.slug;
-        
-        if (fallbackSlug) {
-          slugToLoad = fallbackSlug;
-          categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
+        slugToLoad = null; // Reset slugToLoad if current one is not good
+        categoryInfo = null;
+
+        if (CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0) {
+          // Find the first authorized category
+          for (const catName of CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES) {
+            const foundSlug = Object.values(CATEGORY_SLUG_MAP).find(c => c.name === catName)?.slug;
+            if (foundSlug) {
+              slugToLoad = foundSlug;
+              categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
+              break;
+            }
+          }
+        } else {
+          // If no specific assignments, default to the first category in the system
+          const firstSystemCategorySlug = Object.keys(CATEGORY_SLUG_MAP)[0] as CategorySlug | undefined;
+          if (firstSystemCategorySlug) {
+            slugToLoad = firstSystemCategorySlug;
+            categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
+          }
         }
       }
       
       setIsAuthorized(isUserAuthorizedForCategory(categoryInfo));
 
-      if (categoryInfo) {
-        setActiveCategorySlug(categoryInfo.slug);
+      if (categoryInfo && slugToLoad) {
+        setActiveCategorySlug(slugToLoad);
         setActiveCategoryInfo(categoryInfo);
-        if (slugToLoad) localStorage.setItem('selectedKitchenCategorySlug', slugToLoad);
-        
-        if (categoryParam && categoryParam !== categoryInfo.slug) {
-          router.replace('/kitchen-display'); 
-        } else if (categoryParam) {
-           router.replace('/kitchen-display'); 
-        }
+        localStorage.setItem('selectedKitchenCategorySlug', slugToLoad); // Update localStorage with the final active slug
         if (dbInstance) {
           fetchOrdersForCategory(categoryInfo.name, dbInstance);
         }
       } else {
         setActiveCategoryInfo(null);
-        setIsLoading(false);
-        toast({ title: "خطأ", description: "لم يتم تحديد قسم صالح للمطبخ.", variant: "destructive" });
+        setActiveCategorySlug(null);
+        setIsLoading(false); // No valid category, stop loading
+        if (CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0 && !slugToLoad) {
+          // User has assignments, but none match available categories
+          toast({ title: "خطأ في الإعداد", description: "الأقسام المخصصة لك غير موجودة في النظام.", variant: "destructive" });
+        } else if (Object.keys(CATEGORY_SLUG_MAP).length === 0) {
+            toast({ title: "خطأ", description: "لم يتم تعريف أقسام للمطبخ في النظام.", variant: "destructive" });
+        }
       }
     }
     initializeDbAndCategory();
-  }, [searchParams, router, toast, fetchOrdersForCategory]);
+  // Effect dependencies: pathname ensures re-evaluation if navigated via router.push('/kitchen-display')
+  // db ensures it runs after db is initialized.
+  }, [pathname, db, toast, fetchOrdersForCategory]);
 
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
@@ -268,7 +282,7 @@ export default function KitchenDisplayPage() {
       params.push(now);
       const order = orders.find(o => o.id === orderId);
       if (order && !order.kitchen_started_at) {
-        sql += `, kitchen_started_at = ?`; // Set started_at if somehow missed
+        sql += `, kitchen_started_at = ?`; 
         params.push(order.createdAt.toISOString()); 
       }
     }
@@ -277,7 +291,7 @@ export default function KitchenDisplayPage() {
 
     try {
       await db.execute(sql, params);
-      fetchOrdersForCategory(activeCategoryInfo.name, db);
+      fetchOrdersForCategory(activeCategoryInfo.name, db); // Re-fetch to update UI
       toast({
         title: newStatus === 'قيد التجهيز' ? "بدء التجهيز" : "تم الانتهاء",
         description: `تم تحديث حالة الطلب بنجاح.`,
@@ -301,7 +315,7 @@ export default function KitchenDisplayPage() {
     return false;
   };
 
-  if (isLoading && !activeCategoryInfo) {
+  if (isLoading && !activeCategoryInfo && !db) { // Initial loading state before DB and category logic
     return (
       <>
         <PageHeader title="شاشة المطبخ" description="جارٍ تحميل بيانات المطبخ..." />
@@ -310,7 +324,7 @@ export default function KitchenDisplayPage() {
     );
   }
   
-  if (!activeCategoryInfo) {
+  if (!activeCategoryInfo) { // If no category could be determined
     return (
       <>
         <PageHeader title="شاشة المطبخ" icon={ChefHat} description="لم يتم تحديد قسم صالح لعرضه." />
@@ -323,7 +337,7 @@ export default function KitchenDisplayPage() {
     );
   }
   
-  if (!isAuthorized) {
+  if (!isAuthorized) { // If determined category is not authorized for the user
     return (
       <>
         <PageHeader title="غير مصرح به" description={`ليس لديك الصلاحية لعرض قسم ${activeCategoryInfo.name}.`} icon={Ban} />
@@ -342,7 +356,7 @@ export default function KitchenDisplayPage() {
   return (
     <>
       <PageHeader title={`شاشة المطبخ - ${activeCategoryInfo.name}`} description={`إدارة الطلبات النشطة لقسم ${activeCategoryInfo.name}.`} icon={activeCategoryInfo.icon} />
-      {isLoading ? (
+      {isLoading ? ( // Loading state while fetching orders for the determined category
          <p className="text-center text-muted-foreground py-10">جارٍ تحميل طلبات قسم {activeCategoryInfo.name}...</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-12rem)]">
@@ -402,6 +416,3 @@ export default function KitchenDisplayPage() {
     </>
   );
 }
-    
-
-    

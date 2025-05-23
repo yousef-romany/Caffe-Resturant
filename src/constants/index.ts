@@ -7,12 +7,17 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   children?: NavItem[];
+  slug?: CategorySlug; // Added for kitchen category slugs
 }
 
 export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
 export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
 
+// Example: To show only 'حلويات' and 'مشروبات' for current staff
+// export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = ['حلويات', 'مشروبات'];
+// To show all, leave it empty or list all categories
 export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = [];
+
 
 export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
   "مأكولات": Sandwich,
@@ -37,12 +42,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   {
     label: 'شاشة المطبخ',
-    href: `/kitchen-display?category=${Object.values(CATEGORY_SLUG_MAP)[0]?.slug || 'food'}`,
+    href: '/kitchen-display', // Main link points to the generic display
     icon: ChefHat,
     children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
       label: catMap.name,
-      href: `/kitchen-display?category=${catMap.slug}`,
+      href: '/kitchen-display', // All sub-items point to the same page
       icon: catMap.icon,
+      slug: catMap.slug, // Add slug for localStorage
     })),
   },
   { label: 'الطاولات', href: '/tables', icon: TableIcon },
@@ -109,6 +115,7 @@ export interface Ingredient {
   costPerUnit: number;
   lowStockThreshold?: number;
   supplierId?: string;
+  supplierName?: string; // Optional: denormalized for display
 }
 
 export let DUMMY_INGREDIENTS: Ingredient[] = [
@@ -127,6 +134,7 @@ export let DUMMY_INGREDIENTS: Ingredient[] = [
 
 export interface MenuItemIngredient {
   ingredientId: string;
+  ingredientName?: string; // For display purposes in recipe
   quantity: number;
   unit: IngredientUnit;
 }
@@ -141,91 +149,104 @@ export interface MenuItem {
   description?: string;
   dataAiHint?: string;
   ingredients?: MenuItemIngredient[];
+  is_available?: boolean; // Added for menu item availability
 }
 
 export const DUMMY_MENU_ITEMS: MenuItem[] = [
   {
     id: '1', name: 'اسبريسو', category: 'مشروبات', price: 2.50,
-    imageUrl: 'https://picsum.photos/200/200?image=1060', dataAiHint: "coffee cup", description: "قهوة غنية وقوية",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "coffee cup", description: "قهوة غنية وقوية",
     ingredients: [
       { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },
       { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' }
-    ]
+    ],
+    is_available: true,
   },
   {
     id: '2', name: 'كابتشينو', category: 'مشروبات', price: 3.50,
-    imageUrl: 'https://picsum.photos/200/200?image=225', dataAiHint: "latte art", description: "اسبريسو مع رغوة حليب مبخر",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "latte art", description: "اسبريسو مع رغوة حليب مبخر",
     ingredients: [
       { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },
       { ingredientId: 'ing2', quantity: 150, unit: 'مللي لتر' },
       { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' }
-    ]
+    ],
+    is_available: true,
   },
   {
     id: '3', name: 'تشيز برجر', category: 'مأكولات', price: 8.00,
-    imageUrl: 'https://picsum.photos/200/200?image=302', dataAiHint: "burger fries", description: "برجر لحم بالجبنة كلاسيكي",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "burger fries", description: "برجر لحم بالجبنة كلاسيكي",
     ingredients: [
       { ingredientId: 'ing4', quantity: 1, unit: 'قطعة' },
       { ingredientId: 'ing5', quantity: 1, unit: 'قطعة' },
     ],
-    cost: 1.25
+    cost: 1.25,
+    is_available: true,
   },
   {
     id: '4', name: 'بطاطس مقلية', category: 'مأكولات', price: 3.00,
-    imageUrl: 'https://picsum.photos/200/200?image=431', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "french fries", description: "بطاطس ذهبية مقرمشة",
     ingredients: [ { ingredientId: 'ing6', quantity: 150, unit: 'جرام' } ],
-    cost: 0.30
+    cost: 0.30,
+    is_available: true,
   },
   {
     id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00,
-    imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate slice", description: "كيكة شوكولاتة غنية وفاخرة",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "chocolate slice", description: "كيكة شوكولاتة غنية وفاخرة",
     ingredients: [
         { ingredientId: 'ing7', quantity: 50, unit: 'جرام' },
         { ingredientId: 'ing8', quantity: 20, unit: 'جرام' },
         { ingredientId: 'ing3', quantity: 30, unit: 'جرام' },
     ],
-    cost: 0.484
+    cost: 0.484,
+    is_available: true,
   },
   {
     id: '6', name: 'شيشة تفاح', category: 'شيشة', price: 15.00,
-    imageUrl: 'https://picsum.photos/200/200?image=603', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "hookah smoke", description: "شيشة بنكهة التفاح المنعشة",
     ingredients: [ {ingredientId: 'ing9', quantity: 25, unit: 'جرام'} ],
-    cost: 1.25
+    cost: 1.25,
+    is_available: true,
   },
   {
     id: '7', name: 'آيس لاتيه', category: 'مشروبات', price: 4.00,
-    imageUrl: 'https://picsum.photos/200/200?image=455', dataAiHint: "iced latte", description: "لاتيه مثلج مع ثلج",
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "iced latte", description: "لاتيه مثلج مع ثلج",
     ingredients: [
         { ingredientId: 'ing1', quantity: 7, unit: 'جرام' },
         { ingredientId: 'ing2', quantity: 180, unit: 'مللي لتر' },
         { ingredientId: 'ing10', quantity: 30, unit: 'مللي لتر' }
     ],
-    cost: 0.413
+    cost: 0.413,
+    is_available: true,
   },
   {
     id: '8', name: 'ساندويتش دجاج', category: 'مأكولات', price: 7.50,
-    imageUrl: 'https://picsum.photos/200/200?image=103', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي",
-    cost: 2.00
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "club sandwich", description: "ساندويتش دجاج مشوي",
+    cost: 2.00,
+    is_available: true,
   },
   {
     id: 'm9', name: 'عصير برتقال طازج', category: 'مشروبات', price: 4.50,
-    imageUrl: 'https://picsum.photos/200/200?image=724', dataAiHint: "orange juice", description: "عصير برتقال طازج ومعصور.",
-    cost: 1.00
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "orange juice", description: "عصير برتقال طازج ومعصور.",
+    cost: 1.00,
+    is_available: true,
   },
   {
     id: 'm10', name: 'سلطة سيزر', category: 'مأكولات', price: 6.50,
-    imageUrl: 'https://picsum.photos/200/200?image=310', dataAiHint: "caesar salad", description: "سلطة سيزر كلاسيكية مع دجاج مشوي.",
-    cost: 1.80
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "caesar salad", description: "سلطة سيزر كلاسيكية مع دجاج مشوي.",
+    cost: 1.80,
+    is_available: true,
   },
   {
     id: 'm11', name: 'مولتن كيك', category: 'حلويات', price: 6.00,
-    imageUrl: 'https://picsum.photos/200/200?image=593', dataAiHint: "molten cake", description: "كيك شوكولاتة ذائبة مع آيس كريم فانيلا.",
-    cost: 1.50
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "molten cake", description: "كيك شوكولاتة ذائبة مع آيس كريم فانيلا.",
+    cost: 1.50,
+    is_available: false, // Example of unavailable item
   },
   {
     id: 'm12', name: 'شيشة عنب نعناع', category: 'شيشة', price: 16.00,
-    imageUrl: 'https://picsum.photos/200/200?image=610', dataAiHint: "hookah flavors", description: "شيشة بنكهة العنب والنعناع.",
-    cost: 1.30
+    imageUrl: 'https://placehold.co/300x200.png', dataAiHint: "hookah flavors", description: "شيشة بنكهة العنب والنعناع.",
+    cost: 1.30,
+    is_available: true,
   },
 ];
 
@@ -233,9 +254,10 @@ export const DUMMY_MENU_ITEMS: MenuItem[] = [
 export type OrderStatus = "قيد الانتظار" | "قيد التجهيز" | "جاهز" | "مكتمل" | "ملغى";
 export type OrderType = "صالة" | "سفري" | "توصيل";
 
-export interface OrderItem extends MenuItem {
+export interface OrderItem extends MenuItem { // For cart and order display, inherits MenuItem but overrides quantity and adds notes
   quantity: number;
   notes?: string;
+  category: Category; // Ensure category is present
 }
 export interface Order {
   id: string;
@@ -251,12 +273,13 @@ export interface Order {
   type: OrderType;
   customerName?: string;
   tableNumber?: string;
+  tableId?: string; // Added to store table ID if order is for a table
   deliveryAddress?: string;
-  captainName?: string;
+  captainName?: string; // For delivery orders
   notes?: string;
   createdAt: Date;
   updatedAt?: Date;
-  completed_at?: Date;
+  completed_at?: Date; // Timestamp for when order was marked as completed
   kitchen_started_at?: Date;
   kitchen_ready_at?: Date;
 }
@@ -268,7 +291,10 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o1',
     orderNumber: 'طلب-001',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 2 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1, notes: "بدون بصل" }],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 2, category: 'مشروبات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1, notes: "بدون بصل", category: 'مأكولات' }
+    ],
     subtotal: (2.50 * 2) + 8.00,
     totalAmount: 13.00,
     status: 'مكتمل',
@@ -282,7 +308,10 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o2',
     orderNumber: 'طلب-002',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, notes: "بدون سكر إضافي"}],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 1, category: 'مشروبات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, notes: "بدون سكر إضافي", category: 'حلويات'}
+    ],
     subtotal: 3.50 + 5.00,
     totalAmount: 8.50,
     status: 'قيد التجهيز',
@@ -294,7 +323,10 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o3',
     orderNumber: 'طلب-003',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 }],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, category: 'حلويات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1, category: 'شيشة' }
+    ],
     subtotal: 5.00 + 15.00,
     totalAmount: 20.00,
     status: 'قيد الانتظار',
@@ -307,30 +339,41 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o4',
     orderNumber: 'طلب-004',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '7')!, quantity: 2, notes: "سكر قليل" }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '4')!, quantity: 1 }],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '7')!, quantity: 2, notes: "سكر قليل", category: 'مشروبات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '4')!, quantity: 1, category: 'مأكولات' }
+    ],
     subtotal: (4.00 * 2) + 3.00,
     totalAmount: 11.00,
     status: 'قيد الانتظار',
     type: 'صالة',
     tableNumber: '2',
+    tableId: 't2',
     createdAt: new Date(Date.now() - 60000)
   },
   {
     id: 'o5',
     orderNumber: 'طلب-005',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '8')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, notes: "دبل شوت"}],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '8')!, quantity: 1, category: 'مأكولات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, notes: "دبل شوت", category: 'مشروبات'}
+    ],
     subtotal: 7.50 + 2.50,
     totalAmount: 10.00,
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '8',
+    tableId: 't8',
     createdAt: new Date(Date.now() - 1800000),
     kitchen_started_at: new Date(Date.now() - 900000)
   },
   {
     id: 'o6',
     orderNumber: 'طلب-006',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }],
+    items: [
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, category: 'مشروبات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, category: 'حلويات' }
+    ],
     subtotal: 2.50 + 5.00,
     totalAmount: 7.50,
     status: 'جاهز',
@@ -344,29 +387,31 @@ export let DUMMY_ORDERS: Order[] = [
     id: 'o7',
     orderNumber: 'طلب-007',
     items: [
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1 },
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 2, notes: "حليب قليل الدسم" },
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1, category: 'مأكولات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 2, notes: "حليب قليل الدسم", category: 'مشروبات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, category: 'حلويات' }
     ],
     subtotal: 8.00 + (3.50 * 2) + 5.00,
     totalAmount: 20.00,
     status: 'قيد الانتظار',
     type: 'صالة',
     tableNumber: '1',
+    tableId: 't1',
     createdAt: new Date(Date.now() - 300000),
   },
   {
     id: 'o8',
     orderNumber: 'طلب-008',
     items: [
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === 'm10')!, quantity: 1 },
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === 'm10')!, quantity: 1, category: 'مأكولات' },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1, category: 'شيشة' },
     ],
     subtotal: 6.50 + 15.00,
     totalAmount: 21.50,
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '9',
+    tableId: 't9',
     createdAt: new Date(Date.now() - 720000),
     kitchen_started_at: new Date(Date.now() - 420000)
   }
@@ -428,7 +473,7 @@ export interface PurchaseOrder {
   id: string;
   orderNumber: string;
   supplierId: string;
-  supplierName: string;
+  supplierName: string; // Denormalized for display convenience
   items: PurchaseOrderItem[];
   totalAmount: number;
   status: PurchaseOrderStatus;
@@ -478,13 +523,15 @@ export interface Employee {
   email?: string;
   salary?: number;
   hireDate: Date;
+  is_active?: boolean; // Added for employee status
 }
 
 export let DUMMY_EMPLOYEES: Employee[] = [
-  { id: 'emp1', name: 'أحمد خالد', role: 'مدير', phone: '0501112233', email: 'ahmad.k@example.com', salary: 7000, hireDate: new Date('2023-01-15') },
-  { id: 'emp2', name: 'سارة علي', role: 'شيف', phone: '0502223344', salary: 6000, hireDate: new Date('2023-03-01') },
-  { id: 'emp3', name: 'محمد عبدالله', role: 'كاشير', phone: '0503334455', email: 'mohamed.a@example.com', salary: 4500, hireDate: new Date('2023-05-20') },
-  { id: 'emp4', name: 'فاطمة حسين', role: 'مقدم طعام', phone: '0504445566', salary: 4000, hireDate: new Date('2023-06-10') },
+  { id: 'emp1', name: 'أحمد خالد', role: 'مدير', phone: '0501112233', email: 'ahmad.k@example.com', salary: 7000, hireDate: new Date('2023-01-15'), is_active: true },
+  { id: 'emp2', name: 'سارة علي', role: 'شيف', phone: '0502223344', salary: 6000, hireDate: new Date('2023-03-01'), is_active: true },
+  { id: 'emp3', name: 'محمد عبدالله', role: 'كاشير', phone: '0503334455', email: 'mohamed.a@example.com', salary: 4500, hireDate: new Date('2023-05-20'), is_active: true },
+  { id: 'emp4', name: 'فاطمة حسين', role: 'مقدم طعام', phone: '0504445566', salary: 4000, hireDate: new Date('2023-06-10'), is_active: true },
+  { id: 'emp5', name: 'علي الغامدي (سابق)', role: 'مقدم طعام', phone: '0505556677', salary: 3800, hireDate: new Date('2022-01-10'), is_active: false },
 ];
 
 
@@ -513,24 +560,25 @@ export interface Review {
   comment?: string;
   reviewDate: Date;
   orderId?: string;
-  menuItemName?: string;
+  menuItemName?: string; // Denormalized from menu item at time of review
+  is_public?: boolean; // Whether the review can be shown publicly
 }
 
 export let DUMMY_REVIEWS: Review[] = [
-  { id: 'rev1', customerName: 'خالد الغامدي', rating: 5, comment: 'القهوة ممتازة والخدمة سريعة!', reviewDate: new Date('2024-05-01'), orderId: 'o1', menuItemName: 'اسبريسو' },
-  { id: 'rev2', customerName: 'نورة السبيعي', rating: 4, comment: 'المكان جميل وهادئ، التشيز برجر كان جيد.', reviewDate: new Date('2024-04-28'), orderId: 'o2', menuItemName: 'تشيز برجر' },
-  { id: 'rev3', customerName: 'زائر', rating: 3, comment: 'الشيشة كانت تحتاج فحم زيادة.', reviewDate: new Date('2024-04-25') },
-  { id: 'rev4', customerName: 'عبدالرحمن الشهري', rating: 5, comment: 'كل شيء رائع كالعادة، أفضل كابتشينو في المدينة.', reviewDate: new Date('2024-05-03'), menuItemName: 'كابتشينو' },
+  { id: 'rev1', customerName: 'خالد الغامدي', rating: 5, comment: 'القهوة ممتازة والخدمة سريعة!', reviewDate: new Date('2024-05-01'), orderId: 'o1', menuItemName: 'اسبريسو', is_public: true },
+  { id: 'rev2', customerName: 'نورة السبيعي', rating: 4, comment: 'المكان جميل وهادئ، التشيز برجر كان جيد.', reviewDate: new Date('2024-04-28'), orderId: 'o2', menuItemName: 'تشيز برجر', is_public: true },
+  { id: 'rev3', customerName: 'زائر', rating: 3, comment: 'الشيشة كانت تحتاج فحم زيادة.', reviewDate: new Date('2024-04-25'), is_public: true },
+  { id: 'rev4', customerName: 'عبدالرحمن الشهري', rating: 5, comment: 'كل شيء رائع كالعادة، أفضل كابتشينو في المدينة.', reviewDate: new Date('2024-05-03'), menuItemName: 'كابتشينو', is_public: false }, // Example private review
 ];
 
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
-  employeeName?: string;
+  employeeName?: string; // For display, if needed
   clockInTime: Date;
   clockOutTime?: Date;
-  attendanceDate: Date;
-  workDurationHours?: number;
+  attendanceDate: Date; // Derived from clock_in_time for easier querying
+  workDurationHours?: number; // Calculated on clock_out
   notes?: string;
 }
 
@@ -548,6 +596,7 @@ export let DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
     employeeId: 'emp4',
     clockInTime: new Date(new Date().setHours(9, 10, 0, 0)),
     attendanceDate: new Date(new Date().setHours(0,0,0,0)),
+    // No clockOutTime yet
   },
   {
     id: 'att3',
@@ -562,7 +611,7 @@ export let DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
 export interface SystemUser {
   id: string;
   username: string;
-  hashedPassword?: string;
+  hashedPassword?: string; // Should never be sent to client
   employeeId?: string;
   fullName?: string;
   roles: string[]; // Array of role IDs
@@ -573,9 +622,10 @@ export interface Role {
   id: string;
   name: string;
   description?: string;
-  permissions: string[];
+  permissions: string[]; // Array of permission names/keys
 }
 
+// This list should ideally be fetched from the 'permissions' table in the DB
 export const DUMMY_PERMISSIONS_LIST: string[] = [
   'view_dashboard', 'manage_pos', 'manage_menu', 'view_kitchen_screen', 'manage_tables',
   'manage_inventory_view', 'manage_inventory_edit', 'manage_employees_view', 'manage_employees_edit',
@@ -586,15 +636,15 @@ export const DUMMY_PERMISSIONS_LIST: string[] = [
 
 
 export let DUMMY_ROLES: Role[] = [
-    { id: 'admin', name: 'مسؤول النظام', description: 'صلاحيات كاملة على النظام', permissions: [...DUMMY_PERMISSIONS_LIST] },
-    { id: 'manager', name: 'مدير', description: 'إدارة العمليات والموظفين والتقارير', permissions: ['view_dashboard', 'manage_pos', 'manage_menu', 'manage_employees_view', 'view_reports_sales'] },
-    { id: 'cashier', name: 'كاشير', description: 'معالجة الطلبات والمدفوعات', permissions: ['manage_pos', 'view_orders_history'] },
-    { id: 'chef', name: 'شيف', description: 'إدارة المطبخ وحالة الطلبات', permissions: ['view_kitchen_screen'] },
+    { id: 'role_admin', name: 'مسؤول النظام', description: 'صلاحيات كاملة على النظام', permissions: [...DUMMY_PERMISSIONS_LIST] },
+    { id: 'role_manager', name: 'مدير', description: 'إدارة العمليات والموظفين والتقارير', permissions: ['view_dashboard', 'manage_pos', 'manage_menu', 'manage_employees_view', 'view_reports_sales'] },
+    { id: 'role_cashier', name: 'كاشير', description: 'معالجة الطلبات والمدفوعات', permissions: ['manage_pos', 'view_orders_history'] },
+    { id: 'role_kitchen', name: 'شيف', description: 'إدارة المطبخ وحالة الطلبات', permissions: ['view_kitchen_screen'] },
 ];
 
 export let DUMMY_SYSTEM_USERS: SystemUser[] = [
-    { id: 'user1', username: 'admin', employeeId: 'emp1', fullName: 'أحمد خالد (مدير)', roles: ['admin', 'manager'], isActive: true, hashedPassword: 'hashed_password_example_admin' },
-    { id: 'user2', username: 'cashier1', employeeId: 'emp3', fullName: 'محمد عبدالله (كاشير)', roles: ['cashier'], isActive: true, hashedPassword: 'hashed_password_example_cashier' },
-    { id: 'user3', username: 'chef_sara', employeeId: 'emp2', fullName: 'سارة علي (شيف)', roles: ['chef'], isActive: true, hashedPassword: 'hashed_password_example_chef' },
-    { id: 'user4', username: 'manager_test', fullName: 'مدير تجريبي', roles: ['manager'], isActive: false, hashedPassword: 'hashed_password_example_manager' },
+    { id: 'user1', username: 'admin', employeeId: 'emp1', fullName: 'أحمد خالد (مدير)', roles: ['role_admin', 'role_manager'], isActive: true, hashedPassword: 'hashed_password_example_admin' },
+    { id: 'user2', username: 'cashier1', employeeId: 'emp3', fullName: 'محمد عبدالله (كاشير)', roles: ['role_cashier'], isActive: true, hashedPassword: 'hashed_password_example_cashier' },
+    { id: 'user3', username: 'chef_sara', employeeId: 'emp2', fullName: 'سارة علي (شيف)', roles: ['role_kitchen'], isActive: true, hashedPassword: 'hashed_password_example_chef' },
+    { id: 'user4', username: 'manager_test', fullName: 'مدير تجريبي', roles: ['role_manager'], isActive: false, hashedPassword: 'hashed_password_example_manager' },
 ];
