@@ -1,39 +1,136 @@
 
+"use client";
+
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_MENU_ITEMS, DUMMY_ORDERS, DUMMY_EMPLOYEES, type OrderItem, type MenuItem } from '@/constants';
+import { type Order, type OrderItem as AppOrderItem, type OrderStatus } from '@/constants';
 import { DollarSign, ShoppingBag, Users, Wallet, Utensils } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
+import { parseISO } from 'date-fns';
+
+interface DashboardStats {
+  totalRevenue: number;
+  activeOrdersCount: number;
+  totalEmployees: number;
+}
+
+interface TopSellingItem {
+  name: string;
+  totalRevenue: number;
+  // quantitySold: number; // Can be added if needed
+}
+
+interface RecentOrder {
+  id: string;
+  orderNumber: string;
+  type: string;
+  totalAmount: number;
+  status: OrderStatus;
+  createdAt: Date;
+  tableNumber?: string;
+}
 
 export default function DashboardPage() {
-  const completedOrders = DUMMY_ORDERS.filter(o => o.status === 'مكتمل');
-  const totalSales = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-  const activeOrders = DUMMY_ORDERS.filter(o => o.status === 'قيد الانتظار' || o.status === 'قيد التجهيز').length;
-  
-  const totalEmployees = DUMMY_EMPLOYEES.length;
-  const placeholderCashInHand = 5750.75; 
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
 
-  const itemSales: { [itemId: string]: { name: string; quantitySold: number; totalRevenue: number } } = {};
-
-  completedOrders.forEach(order => {
-    order.items.forEach(orderItem => {
-      const menuItem = DUMMY_MENU_ITEMS.find(mi => mi.id === orderItem.id);
-      if (menuItem) {
-        if (!itemSales[menuItem.id]) {
-          itemSales[menuItem.id] = { name: menuItem.name, quantitySold: 0, totalRevenue: 0 };
-        }
-        itemSales[menuItem.id].quantitySold += orderItem.quantity;
-        // Use orderItem.price as it's the price at the time of order, which is what DUMMY_ORDERS has
-        itemSales[menuItem.id].totalRevenue += orderItem.price * orderItem.quantity; 
-      }
-    });
+  const [stats, setStats] = useState<DashboardStats>({
+    totalRevenue: 0,
+    activeOrdersCount: 0,
+    totalEmployees: 0,
   });
+  const [topSellingItems, setTopSellingItems] = useState<TopSellingItem[]>([]);
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const placeholderCashInHand = 5750.75; // Remains placeholder
 
-  const topSellingItems = Object.values(itemSales)
-    .sort((a, b) => b.totalRevenue - a.totalRevenue) // Sort by revenue
-    .slice(0, 3); // Get top 3
+  useEffect(() => {
+    async function initializeAndFetchData() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        fetchDashboardData(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch data:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات لوحة التحكم.", variant: "destructive" });
+        setIsLoading(false);
+      }
+    }
+    initializeAndFetchData();
+  }, [toast]);
 
+  const fetchDashboardData = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      // Total Revenue
+      const revenueResult: any[] = await currentDb.select("SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل'");
+      const totalRevenue = revenueResult[0]?.total || 0;
+
+      // Active Orders Count
+      const activeOrdersResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM orders WHERE status IN ('قيد الانتظار', 'قيد التجهيز')");
+      const activeOrdersCount = activeOrdersResult[0]?.count || 0;
+
+      // Total Employees
+      const employeesResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM employees WHERE is_active = true");
+      const totalEmployees = employeesResult[0]?.count || 0;
+      
+      setStats({ totalRevenue, activeOrdersCount, totalEmployees });
+
+      // Top Selling Items
+      const topItemsResult: any[] = await currentDb.select(`
+        SELECT mi.name, SUM(oi.price_at_order * oi.quantity) as totalRevenue 
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        JOIN menu_items mi ON oi.menu_item_id = mi.id
+        WHERE o.status = 'مكتمل'
+        GROUP BY mi.id, mi.name 
+        ORDER BY totalRevenue DESC 
+        LIMIT 3
+      `);
+      setTopSellingItems(topItemsResult.map(item => ({...item, totalRevenue: Number(item.totalRevenue) })));
+
+      // Recent Orders
+      const recentOrdersResult: any[] = await currentDb.select(`
+        SELECT o.id, o.order_number as orderNumber, o.type, o.total_amount as totalAmount, o.status, o.created_at as createdAt, ti.number as tableNumber
+        FROM orders o
+        LEFT JOIN tables_info ti ON o.table_id = ti.id
+        ORDER BY o.created_at DESC
+        LIMIT 5
+      `);
+      setRecentOrders(recentOrdersResult.map(order => ({
+        ...order,
+        totalAmount: Number(order.totalAmount),
+        createdAt: parseISO(order.createdAt),
+      })));
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات لوحة التحكم.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="لوحة التحكم" description="جارٍ تحميل بيانات لوحة التحكم..." />
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
+      </>
+    );
+  }
 
   return (
     <>
@@ -46,8 +143,9 @@ export default function DashboardPage() {
             <DollarSign className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalSales.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">20.1% أكثر من الشهر الماضي</p>
+            <div className="text-2xl font-bold">${stats.totalRevenue.toFixed(2)}</div>
+            {/* Placeholder for comparison, real data would need historical data */}
+            <p className="text-xs text-muted-foreground">20.1% أكثر من الشهر الماضي</p> 
           </CardContent>
         </Card>
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -56,7 +154,7 @@ export default function DashboardPage() {
             <ShoppingBag className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeOrders}</div>
+            <div className="text-2xl font-bold">{stats.activeOrdersCount}</div>
             <p className="text-xs text-muted-foreground">قيد التنفيذ حاليًا</p>
           </CardContent>
         </Card>
@@ -67,7 +165,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${placeholderCashInHand.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">الرصيد الحالي بالخزنة</p>
+            <p className="text-xs text-muted-foreground">الرصيد الحالي بالخزنة (تقديري)</p>
           </CardContent>
         </Card>
          <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -76,7 +174,7 @@ export default function DashboardPage() {
             <Users className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalEmployees}</div>
+            <div className="text-2xl font-bold">{stats.totalEmployees}</div>
             <p className="text-xs text-muted-foreground">موظف نشط</p>
           </CardContent>
         </Card>
@@ -88,11 +186,11 @@ export default function DashboardPage() {
             <CardTitle>الطلبات الأخيرة</CardTitle>
           </CardHeader>
           <CardContent>
-            {DUMMY_ORDERS.slice(0,5).map(order => (
+            {recentOrders.length > 0 ? recentOrders.map(order => (
               <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                 <div>
                   <p className="font-medium">{order.orderNumber}</p>
-                  <p className="text-sm text-muted-foreground">{order.type} - {new Date(order.createdAt).toLocaleTimeString('ar-EG')}</p>
+                  <p className="text-sm text-muted-foreground">{order.type} {order.tableNumber ? `- ط ${order.tableNumber}` : ''} - {new Date(order.createdAt).toLocaleTimeString('ar-EG')}</p>
                 </div>
                 <div className="text-right">
                    <p className="font-medium">${order.totalAmount.toFixed(2)}</p>
@@ -101,11 +199,11 @@ export default function DashboardPage() {
                       order.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
                       order.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
                        order.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
-                      'bg-red-100 text-red-700' // For 'Cancelled'
+                      'bg-red-100 text-red-700' // For 'ملغى'
                     }`}>{order.status}</span>
                 </div>
               </div>
-            ))}
+            )) : <p className="text-muted-foreground text-center py-4">لا توجد طلبات حديثة.</p>}
             <Button variant="link" className="mt-4 p-0 text-primary hover:underline" asChild>
               <Link href="/orders">عرض كل الطلبات</Link>
             </Button>
@@ -117,12 +215,12 @@ export default function DashboardPage() {
             <CardTitle>العناصر الأكثر مبيعًا</CardTitle>
           </CardHeader>
           <CardContent>
-             {topSellingItems.map(item => (
+             {topSellingItems.length > 0 ? topSellingItems.map(item => (
               <div key={item.name} className="flex items-center justify-between py-2 border-b last:border-b-0">
                 <p className="font-medium">{item.name}</p>
                 <p className="text-sm text-muted-foreground">${item.totalRevenue.toFixed(2)} إيرادات</p>
               </div>
-            ))}
+            )) : <p className="text-muted-foreground text-center py-4">لا توجد بيانات عن العناصر الأكثر مبيعًا.</p>}
              <Button variant="link" className="mt-4 p-0 text-primary hover:underline" asChild>
               <Link href="/reports/top-selling">عرض التقرير الكامل</Link>
             </Button>
@@ -132,3 +230,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
