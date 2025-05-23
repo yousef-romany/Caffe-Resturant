@@ -1,15 +1,18 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DUMMY_ORDERS, type Order, type Category, type OrderType } from '@/constants';
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DollarSign, ShoppingBag, TrendingUp, CalendarDays } from 'lucide-react';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import type { OrderType, Category } from '@/constants';
+import { useToast } from '@/hooks/use-toast';
 
 const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC', '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF'];
 
@@ -28,7 +31,7 @@ interface OrderTypeSalesData {
   value: number;
 }
 
-type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually' | 'custom';
+type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'semi_annually' | 'annually';
 
 const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: Date } => {
   const now = new Date();
@@ -41,18 +44,21 @@ const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: D
       return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
     case 'quarterly':
       return { startDate: startOfQuarter(now), endDate: endOfQuarter(now) };
-    case 'semi_annually': // Last 6 months from the start of the first month in range
+    case 'semi_annually':
       return { startDate: startOfMonth(subMonths(now, 5)), endDate: endOfMonth(now) };
     case 'annually':
       return { startDate: startOfYear(now), endDate: endOfYear(now) };
-    // case 'custom': // Needs date pickers, not implemented yet
-    default: // Default to current month
+    default:
       return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
   }
 };
 
 
 export default function SalesReportPage() {
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+
   const [monthlySalesChartData, setMonthlySalesChartData] = useState<MonthlySalesData[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySalesData[]>([]);
   const [orderTypeSales, setOrderTypeSales] = useState<OrderTypeSalesData[]>([]);
@@ -65,71 +71,100 @@ export default function SalesReportPage() {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    async function initDb() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB for sales report:", error);
+        toast({ title: "خطأ في الاتصال", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+      }
+    }
+    initDb();
+  }, [toast]);
 
   useEffect(() => {
-    if (!isClient) return;
+    if (!isClient || !db) {
+      setIsLoading(db === null); // Still loading if db connection attempt is pending
+      return;
+    }
 
-    const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+    async function fetchDataForPeriod() {
+      setIsLoading(true);
+      const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
+      const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss');
+      const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
 
-    const filteredOrdersForPeriod = DUMMY_ORDERS.filter(order => {
-      const orderDate = new Date(order.createdAt);
-      return isValid(orderDate) && orderDate >= startDate && orderDate <= endDate && order.status === 'مكتمل';
-    });
+      try {
+        // Fetch summary stats
+        const summaryResult: any[] = await db.select(
+          "SELECT SUM(total_amount) as totalRevenue, COUNT(*) as totalOrders FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+          [startDateString, endDateString]
+        );
+        const revenue = Number(summaryResult[0]?.totalRevenue) || 0;
+        const ordersCount = Number(summaryResult[0]?.totalOrders) || 0;
+        setTotalRevenue(revenue);
+        setTotalOrders(ordersCount);
+        setAverageOrderValue(ordersCount > 0 ? revenue / ordersCount : 0);
 
-    const revenue = filteredOrdersForPeriod.reduce((sum, order) => sum + order.totalAmount, 0);
-    setTotalRevenue(revenue);
-    setTotalOrders(filteredOrdersForPeriod.length);
-    setAverageOrderValue(filteredOrdersForPeriod.length > 0 ? revenue / filteredOrdersForPeriod.length : 0);
+        // Fetch category sales
+        const catSalesResult: any[] = await db.select(
+          `SELECT mi.category, SUM(oi.price_at_order * oi.quantity) as value
+           FROM orders o
+           JOIN order_items oi ON o.id = oi.order_id
+           JOIN menu_items mi ON oi.menu_item_id = mi.id
+           WHERE o.status = 'مكتمل' AND o.created_at BETWEEN ? AND ?
+           GROUP BY mi.category
+           ORDER BY value DESC`,
+          [startDateString, endDateString]
+        );
+        setCategorySales(catSalesResult.map(r => ({ name: r.category as Category, value: Number(r.value) })));
+        
+        // Fetch order type sales
+        const otSalesResult: any[] = await db.select(
+          `SELECT type, SUM(total_amount) as value
+           FROM orders
+           WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?
+           GROUP BY type
+           ORDER BY value DESC`,
+          [startDateString, endDateString]
+        );
+        setOrderTypeSales(otSalesResult.map(r => ({ name: r.type as OrderType, value: Number(r.value) })));
 
-    const catSales: { [key in Category]?: number } = {};
-    filteredOrdersForPeriod.forEach(order => {
-      order.items.forEach(item => {
-        catSales[item.category] = (catSales[item.category] || 0) + (item.price * item.quantity);
-      });
-    });
-    setCategorySales(
-        (Object.entries(catSales) as [Category, number][])
-        .map(([name, value]) => ({ name, value }))
-        .sort((a,b) => b.value - a.value)
-    );
-    
-    const otSales: { [key in OrderType]?: number } = {};
-    filteredOrdersForPeriod.forEach(order => {
-        otSales[order.type] = (otSales[order.type] || 0) + order.totalAmount;
-    });
-    setOrderTypeSales(
-        (Object.entries(otSales) as [OrderType, number][])
-        .map(([name, value]) => ({name, value}))
-        .sort((a,b) => b.value - a.value)
-    );
+        // Fetch monthly sales for the last 6 months (always last 6 months for this chart)
+        const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+        const currentMonthDate = new Date();
+        const salesChartDataPromises: Promise<MonthlySalesData>[] = Array(6).fill(null).map(async (_, i) => {
+            const targetMonthDate = subMonths(currentMonthDate, 5 - i);
+            const monthStart = format(startOfMonth(targetMonthDate), 'yyyy-MM-dd HH:mm:ss');
+            const monthEnd = format(endOfMonth(targetMonthDate), 'yyyy-MM-dd HH:mm:ss');
+            const monthIndex = targetMonthDate.getMonth();
+            const year = targetMonthDate.getFullYear();
+            const monthName = `${monthsAr[monthIndex]} ${year}`;
 
-    // Monthly sales chart data (always last 6 months for this specific chart)
-    const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-    const currentMonthDate = new Date();
-    const salesChartData: MonthlySalesData[] = Array(6).fill(null).map((_, i) => {
-        const targetMonthDate = subMonths(currentMonthDate, 5 - i);
-        const monthIndex = targetMonthDate.getMonth();
-        const year = targetMonthDate.getFullYear();
-        const monthName = monthsAr[monthIndex];
+            const monthSalesResult: any[] = await db.select(
+                "SELECT SUM(total_amount) as sales FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
+                [monthStart, monthEnd]
+            );
+            return {
+                month: monthName,
+                sales: Number(monthSalesResult[0]?.sales) || 0, 
+            };
+        });
+        setMonthlySalesChartData(await Promise.all(salesChartDataPromises));
 
-        const salesForMonth = DUMMY_ORDERS
-            .filter(o => {
-                const orderDate = new Date(o.createdAt);
-                return o.status === 'مكتمل' && 
-                       isValid(orderDate) &&
-                       orderDate.getMonth() === monthIndex &&
-                       orderDate.getFullYear() === year;
-            })
-            .reduce((sum, order) => sum + order.totalAmount, 0);
-        return {
-            month: `${monthName} ${year}`, // Add year for clarity
-            sales: salesForMonth, 
-        };
-    });
-    setMonthlySalesChartData(salesChartData);
+      } catch (error) {
+        console.error("Error fetching sales report data:", error);
+        toast({ title: "خطأ", description: "فشل في جلب بيانات تقرير المبيعات.", variant: "destructive" });
+        setTotalRevenue(0); setTotalOrders(0); setAverageOrderValue(0);
+        setCategorySales([]); setOrderTypeSales([]); setMonthlySalesChartData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-  }, [selectedPeriod, isClient]);
+    fetchDataForPeriod();
+  }, [selectedPeriod, isClient, db, toast]);
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
@@ -148,11 +183,11 @@ export default function SalesReportPage() {
   };
 
 
-  if (!isClient) {
+  if (!isClient || isLoading) {
     return (
       <>
-        <PageHeader title="تقرير المبيعات" description="تحليل أداء المبيعات." icon={TrendingUp}/>
-        <p className="text-center text-muted-foreground py-10">جارٍ تحميل التقرير...</p>
+        <PageHeader title="تقرير المبيعات" description="جارٍ تحميل بيانات التقرير..." icon={TrendingUp}/>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
@@ -177,7 +212,6 @@ export default function SalesReportPage() {
                 <SelectItem value="quarterly">ربع سنوي</SelectItem>
                 <SelectItem value="semi_annually">نصف سنوي (آخر 6 أشهر)</SelectItem>
                 <SelectItem value="annually">سنوي</SelectItem>
-                {/* <SelectItem value="custom" disabled>فترة مخصصة (قريباً)</SelectItem> */}
               </SelectContent>
             </Select>
           </div>
@@ -327,4 +361,3 @@ export default function SalesReportPage() {
     </>
   );
 }
-
