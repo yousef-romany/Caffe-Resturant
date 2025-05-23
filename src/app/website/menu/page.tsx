@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/custom/PageHeader';
 import { MenuItemCard } from '@/components/custom/MenuItemCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ITEM_CATEGORIES, type MenuItem, type Category } from '@/constants';
+import { ITEM_CATEGORIES, type MenuItem, type Category, type OrderType } from '@/constants';
 import { Search, ListFilter, Utensils, ShoppingCart, PlusCircle, MinusCircle, XCircle, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,6 +40,7 @@ export default function CustomerMenuPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedTable, setSelectedTable] = useState<{ id: string | null; number: string | null }>({ id: null, number: null });
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   useEffect(() => {
     async function initializeDbAndLoadMenu() {
@@ -114,7 +115,9 @@ export default function CustomerMenuPage() {
     toast({
       title: `تمت إضافة "${item.name}" إلى سلة الطلبات.`,
     });
-    setIsSheetOpen(true); // Open sheet when item is added
+    if (!isSheetOpen) {
+      setIsSheetOpen(true); 
+    }
   };
 
   const handleUpdateCartQuantity = (cartItemId: string, change: number) => {
@@ -143,7 +146,7 @@ export default function CustomerMenuPage() {
     return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cartItems]);
 
-  const handlePlaceOrder = async () => { // Marked as async for future DB operations
+  const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
       toast({ title: "سلة الطلبات فارغة!", description: "الرجاء إضافة بعض العناصر أولاً.", variant: "destructive" });
       return;
@@ -153,26 +156,69 @@ export default function CustomerMenuPage() {
       return;
     }
 
-    // TODO: Implement actual order placement logic to the database
-    // This will involve:
-    // 1. Creating a new order in the 'orders' table (status: 'قيد الانتظار', type: selectedTable.id ? 'صالة' : 'سفري' or based on user choice)
-    // 2. Getting the new order_id.
-    // 3. Inserting each cartItem into the 'order_items' table, linked to the new order_id.
-    // 4. If it's a table order, update the table status in 'tables_info'.
-    // 5. Clear localStorage for table selection.
+    setIsPlacingOrder(true);
 
-    console.log("Placing order (DB integration pending):", cartItems, "for table:", selectedTable);
-    toast({
-      title: "تم إرسال الطلب بنجاح (تجريبي)",
-      description: `إجمالي الطلب: $${cartSubtotal.toFixed(2)}. ${selectedTable.number ? `لطاولة رقم ${selectedTable.number}` : ''}`,
-      className: "bg-green-500 text-white"
-    });
-    setCartItems([]); 
-    setIsSheetOpen(false); 
-    // Potentially clear selectedTable from localStorage or state after successful order for a table
-    // localStorage.removeItem('customer_selected_table_id');
-    // localStorage.removeItem('customer_selected_table_number');
-    // setSelectedTable({ id: null, number: null });
+    const newOrderId = `cust-order-${Date.now()}`;
+    const newOrderNumber = `CUST-${Date.now().toString().slice(-6)}`;
+    const orderType: OrderType = selectedTable.id ? 'صالة' : 'سفري'; // Default to Takeaway if no table
+    const now = new Date().toISOString();
+    const totalAmount = cartSubtotal; // For simplicity, no VAT/discount from customer side yet
+
+    try {
+      // Insert into orders table
+      await db.execute(
+        "INSERT INTO orders (id, order_number, type, subtotal, total_amount, status, created_at, updated_at, table_id, customer_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        [
+          newOrderId, newOrderNumber, orderType,
+          cartSubtotal, totalAmount, 'قيد الانتظار',
+          now, now, selectedTable.id || null,
+          selectedTable.id ? `طاولة ${selectedTable.number}` : 'عميل سفري' // Placeholder customer name
+        ]
+      );
+
+      // Insert into order_items table
+      for (const item of cartItems) {
+        // Fetch current cost for the item
+        const menuItemFromDb: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+        const costAtOrder = menuItemFromDb.length > 0 ? Number(menuItemFromDb[0].cost) || 0 : 0;
+
+        await db.execute(
+          "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          [
+            `oi-cust-${Date.now()}-${item.id}`, newOrderId, item.id, item.name,
+            item.quantity, item.price, costAtOrder, (item as any).notes || null // Assuming notes might be added to cartItem later
+          ]
+        );
+      }
+
+      // Update table status if it's a table order
+      if (selectedTable.id) {
+        await db.execute(
+          "UPDATE tables_info SET status = 'مشغولة', current_order_id = $1, updated_at = $2 WHERE id = $3",
+          [newOrderId, now, selectedTable.id]
+        );
+      }
+
+      toast({
+        title: "تم إرسال الطلب بنجاح!",
+        description: `رقم طلبك هو: ${newOrderNumber}. ${selectedTable.number ? `لطاولة رقم ${selectedTable.number}` : ''}`,
+        className: "bg-green-500 text-white"
+      });
+
+      setCartItems([]);
+      if (selectedTable.id) {
+        localStorage.removeItem('customer_selected_table_id');
+        localStorage.removeItem('customer_selected_table_number');
+        setSelectedTable({ id: null, number: null });
+      }
+      setIsSheetOpen(false);
+
+    } catch (error) {
+      console.error("Error placing order:", error);
+      toast({ title: "خطأ في إرسال الطلب", description: "حدث خطأ أثناء محاولة إرسال طلبك. يرجى المحاولة مرة أخرى.", variant: "destructive" });
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   return (
@@ -189,7 +235,7 @@ export default function CustomerMenuPage() {
             variant="outline"
             size="lg"
             className="fixed bottom-6 end-6 rtl:end-auto rtl:start-6 z-50 shadow-lg rounded-full p-4 h-auto bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => setIsSheetOpen(true)}
+            // onClick={() => setIsSheetOpen(true)} // onOpenChange handles this
           >
             <ShoppingCart className="h-6 w-6" />
             {cartItems.length > 0 && (
@@ -248,8 +294,8 @@ export default function CustomerMenuPage() {
                   {cartSubtotal.toFixed(2)}
                 </span>
               </div>
-              <Button onClick={handlePlaceOrder} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                إرسال الطلب (DB قيد التنفيذ)
+              <Button onClick={handlePlaceOrder} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isPlacingOrder}>
+                {isPlacingOrder ? 'جارٍ إرسال الطلب...' : 'إرسال الطلب'}
               </Button>
             </SheetFooter>
           )}
@@ -314,4 +360,3 @@ export default function CustomerMenuPage() {
     </div>
   );
 }
-
