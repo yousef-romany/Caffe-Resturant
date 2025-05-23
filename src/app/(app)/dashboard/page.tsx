@@ -18,6 +18,7 @@ interface DashboardStats {
   totalRevenue: number;
   activeOrdersCount: number;
   totalEmployees: number;
+  estimatedOperationalBalance: number; // New field for calculated balance
 }
 
 interface TopSellingItem {
@@ -46,10 +47,10 @@ export default function DashboardPage() {
     totalRevenue: 0,
     activeOrdersCount: 0,
     totalEmployees: 0,
+    estimatedOperationalBalance: 0, // Initialize
   });
   const [topSellingItems, setTopSellingItems] = useState<TopSellingItem[]>([]);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
-  const placeholderCashInHand = 5750.75; // Remains placeholder
 
   useEffect(() => {
     async function initializeAndFetchData() {
@@ -77,17 +78,23 @@ export default function DashboardPage() {
     try {
       // Total Revenue for completed orders
       const revenueResult: any[] = await currentDb.select("SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل'");
-      const totalRevenue = revenueResult[0]?.total || 0;
+      const totalRevenue = Number(revenueResult[0]?.total) || 0;
 
       // Active Orders Count
       const activeOrdersResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM orders WHERE status IN ('قيد الانتظار', 'قيد التجهيز')");
-      const activeOrdersCount = activeOrdersResult[0]?.count || 0;
+      const activeOrdersCount = Number(activeOrdersResult[0]?.count) || 0;
 
       // Total Active Employees
       const employeesResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
-      const totalEmployees = employeesResult[0]?.count || 0;
+      const totalEmployees = Number(employeesResult[0]?.count) || 0;
       
-      setStats({ totalRevenue, activeOrdersCount, totalEmployees });
+      // Total cost of received purchase orders
+      const purchaseCostsResult: any[] = await currentDb.select("SELECT SUM(total_amount) as totalPurchaseCosts FROM purchase_orders WHERE status = 'مستلم'");
+      const totalPurchaseCosts = Number(purchaseCostsResult[0]?.totalPurchaseCosts) || 0;
+
+      const estimatedOperationalBalance = totalRevenue - totalPurchaseCosts;
+      
+      setStats({ totalRevenue, activeOrdersCount, totalEmployees, estimatedOperationalBalance });
 
       // Top Selling Items (by revenue from completed orders)
       const topItemsResult: any[] = await currentDb.select(`
@@ -150,7 +157,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${stats.totalRevenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">(للطلبات المكتملة)</p> 
+            <p className="text-xs text-muted-foreground">(للطلبات المكتملة - كل الأوقات)</p> 
           </CardContent>
         </Card>
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -160,17 +167,17 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.activeOrdersCount}</div>
-            <p className="text-xs text-muted-foreground">قيد الانتظار أو التجهيز</p>
+            <p className="text-xs text-muted-foreground">قيد الانتظار أو التجهيز حاليًا</p>
           </CardContent>
         </Card>
         <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الخزنة</CardTitle>
+            <CardTitle className="text-sm font-medium">الرصيد التشغيلي التقديري</CardTitle>
             <Wallet className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${placeholderCashInHand.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">الرصيد الحالي بالخزنة (تقديري)</p>
+            <div className="text-2xl font-bold">${stats.estimatedOperationalBalance.toFixed(2)}</div>
+            <p className="text-xs text-muted-foreground">إجمالي الإيرادات المكتملة - تكلفة المشتريات المستلمة</p>
           </CardContent>
         </Card>
          <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -180,7 +187,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-            <p className="text-xs text-muted-foreground">موظف نشط</p>
+            <p className="text-xs text-muted-foreground">موظف نشط حاليًا</p>
           </CardContent>
         </Card>
       </div>
