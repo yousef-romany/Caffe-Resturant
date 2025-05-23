@@ -1,6 +1,6 @@
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock, Coffee as CoffeeIcon, Cake, Beer, Soup, Sandwich, GlassWater, QrCode } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, BookOpenCheck, ListOrdered, BarChart3, Settings, ChefHat, Table2 as TableIcon, Package, UsersRound, Award, MessageSquare, Wallet, ShoppingBasket, Users, ListChecks, TrendingUp, TrendingDown, Landmark, Archive, Flame, FileText, UserCog, CalendarClock, Coffee as CoffeeIcon, Cake, Beer, Soup, Sandwich, GlassWater, QrCode, ShieldCheck } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -12,12 +12,8 @@ export interface NavItem {
 export type Category = "مأكولات" | "مشروبات" | "حلويات" | "شيشة";
 export const ITEM_CATEGORIES: Category[] = ["مأكولات", "مشروبات", "حلويات", "شيشة"];
 
-// For Kitchen Display System - determines which categories a staff member sees
-// Example: ['حلويات', 'مشروبات'] means staff sees only these two sections.
-// An empty array or undefined means staff sees ALL sections.
-export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = []; // Empty = show all for now
+export const CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES: Category[] = [];
 
-// Map categories to icons for KDS
 export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
   "مأكولات": Sandwich,
   "مشروبات": GlassWater,
@@ -41,11 +37,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck },
   {
     label: 'شاشة المطبخ',
-    href: `/kitchen/${Object.values(CATEGORY_SLUG_MAP)[0]?.slug || 'food'}`, // Default to first category or 'food'
+    href: `/kitchen-display?category=${Object.values(CATEGORY_SLUG_MAP)[0]?.slug || 'food'}`,
     icon: ChefHat,
     children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
       label: catMap.name,
-      href: `/kitchen/${catMap.slug}`,
+      href: `/kitchen-display?category=${catMap.slug}`,
       icon: catMap.icon,
     })),
   },
@@ -62,9 +58,9 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: 'الموظفين', href: '/employees', icon: UsersRound },
-  { 
-    label: 'سجل الحضور', 
-    href: '/attendance', 
+  {
+    label: 'سجل الحضور',
+    href: '/attendance',
     icon: CalendarClock,
     children: [
       { label: 'عرض السجل', href: '/attendance', icon: ListOrdered },
@@ -108,31 +104,31 @@ export const INGREDIENT_UNITS: IngredientUnit[] = ['جرام', 'كيلوجرام
 export interface Ingredient {
   id: string;
   name: string;
-  unit: IngredientUnit; // The unit for stockQuantity and costPerUnit
+  unit: IngredientUnit;
   stockQuantity: number;
-  costPerUnit: number; // Cost for one unit as defined in 'unit'
+  costPerUnit: number;
   lowStockThreshold?: number;
   supplierId?: string;
 }
 
 export let DUMMY_INGREDIENTS: Ingredient[] = [
-  { id: 'ing1', name: 'حبوب بن أرابيكا', unit: 'جرام', stockQuantity: 10000, costPerUnit: 0.02, lowStockThreshold: 2000 }, // Cost per gram (20/kg)
-  { id: 'ing2', name: 'حليب كامل الدسم', unit: 'مللي لتر', stockQuantity: 20000, costPerUnit: 0.0015, lowStockThreshold: 5000 }, // Cost per ml (1.5/L)
-  { id: 'ing3', name: 'سكر أبيض', unit: 'جرام', stockQuantity: 50000, costPerUnit: 0.0008, lowStockThreshold: 10000 }, // Cost per gram (0.8/kg)
+  { id: 'ing1', name: 'حبوب بن أرابيكا', unit: 'جرام', stockQuantity: 10000, costPerUnit: 0.02, lowStockThreshold: 2000 },
+  { id: 'ing2', name: 'حليب كامل الدسم', unit: 'مللي لتر', stockQuantity: 20000, costPerUnit: 0.0015, lowStockThreshold: 5000 },
+  { id: 'ing3', name: 'سكر أبيض', unit: 'جرام', stockQuantity: 50000, costPerUnit: 0.0008, lowStockThreshold: 10000 },
   { id: 'ing4', name: 'لحم برجر', unit: 'قطعة', stockQuantity: 100, costPerUnit: 1, lowStockThreshold: 20 },
   { id: 'ing5', name: 'خبز برجر', unit: 'قطعة', stockQuantity: 100, costPerUnit: 0.25, lowStockThreshold: 20 },
-  { id: 'ing6', name: 'بطاطس مجمدة', unit: 'جرام', stockQuantity: 30000, costPerUnit: 0.002, lowStockThreshold: 5000 }, // Cost per gram (2/kg)
-  { id: 'ing7', name: 'دقيق كيك', unit: 'جرام', stockQuantity: 5000, costPerUnit: 0.0012, lowStockThreshold: 1000 }, // Cost per gram (1.2/kg)
+  { id: 'ing6', name: 'بطاطس مجمدة', unit: 'جرام', stockQuantity: 30000, costPerUnit: 0.002, lowStockThreshold: 5000 },
+  { id: 'ing7', name: 'دقيق كيك', unit: 'جرام', stockQuantity: 5000, costPerUnit: 0.0012, lowStockThreshold: 1000 },
   { id: 'ing8', name: 'بودرة كاكاو', unit: 'جرام', stockQuantity: 500, costPerUnit: 0.02, lowStockThreshold: 100 },
   { id: 'ing9', name: 'معسل تفاح', unit: 'جرام', stockQuantity: 1000, costPerUnit: 0.05, lowStockThreshold: 200 },
-  { id: 'ing10', name: 'ماء (مفلتر)', unit: 'مللي لتر', stockQuantity: 100000, costPerUnit: 0.0001, lowStockThreshold: 20000 }, // Example water cost
+  { id: 'ing10', name: 'ماء (مفلتر)', unit: 'مللي لتر', stockQuantity: 100000, costPerUnit: 0.0001, lowStockThreshold: 20000 },
 ];
 
 
 export interface MenuItemIngredient {
   ingredientId: string;
   quantity: number;
-  unit: IngredientUnit; // The unit used in this specific menu item's recipe
+  unit: IngredientUnit;
 }
 
 export interface MenuItem {
@@ -140,12 +136,11 @@ export interface MenuItem {
   name: string;
   category: Category;
   price: number;
-  cost?: number; // This will be CALCULATED if ingredients are present, otherwise can be manual
+  cost?: number;
   imageUrl: string;
   description?: string;
   dataAiHint?: string;
-  ingredients?: MenuItemIngredient[]; // Array of ingredients used
-  // sizes?: { name: string; price: number }[]; // Future use
+  ingredients?: MenuItemIngredient[];
 }
 
 export const DUMMY_MENU_ITEMS: MenuItem[] = [
@@ -185,9 +180,9 @@ export const DUMMY_MENU_ITEMS: MenuItem[] = [
     id: '5', name: 'كيكة شوكولاتة', category: 'حلويات', price: 5.00,
     imageUrl: 'https://picsum.photos/200/200?image=585', dataAiHint: "chocolate slice", description: "كيكة شوكولاتة غنية وفاخرة",
     ingredients: [
-        { ingredientId: 'ing7', quantity: 50, unit: 'جرام' }, // Flour
-        { ingredientId: 'ing8', quantity: 20, unit: 'جرام' }, // Cocoa
-        { ingredientId: 'ing3', quantity: 30, unit: 'جرام' }, // Sugar
+        { ingredientId: 'ing7', quantity: 50, unit: 'جرام' },
+        { ingredientId: 'ing8', quantity: 20, unit: 'جرام' },
+        { ingredientId: 'ing3', quantity: 30, unit: 'جرام' },
     ],
     cost: 0.484
   },
@@ -279,7 +274,7 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'مكتمل',
     type: 'صالة',
     tableNumber: '5',
-    createdAt: new Date(Date.now() - 3600000 * 3), // 3 hours ago
+    createdAt: new Date(Date.now() - 3600000 * 3),
     kitchen_started_at: new Date(Date.now() - 3600000 * 2.9),
     kitchen_ready_at: new Date(Date.now() - 3600000 * 2.7),
     completed_at: new Date(Date.now() - 3600000 * 2.5)
@@ -287,14 +282,14 @@ export let DUMMY_ORDERS: Order[] = [
   {
     id: 'o2',
     orderNumber: 'طلب-002',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, notes: "بدون سكر إضافي"}], // كابتشينو و كيكة
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1, notes: "بدون سكر إضافي"}],
     subtotal: 3.50 + 5.00,
     totalAmount: 8.50,
     status: 'قيد التجهيز',
     type: 'سفري',
     customerName: 'أحمد محمود',
-    createdAt: new Date(Date.now() - 1200000), // 20 minutes ago
-    kitchen_started_at: new Date(Date.now() - 600000) // 10 minutes ago
+    createdAt: new Date(Date.now() - 1200000),
+    kitchen_started_at: new Date(Date.now() - 600000)
   },
   {
     id: 'o3',
@@ -307,7 +302,7 @@ export let DUMMY_ORDERS: Order[] = [
     customerName: 'فاطمة علي',
     deliveryAddress: '123 الشارع الرئيسي, المدينة',
     captainName: 'جون دو',
-    createdAt: new Date(Date.now() - 360000) // 6 minutes ago
+    createdAt: new Date(Date.now() - 360000)
   },
   {
     id: 'o4',
@@ -318,19 +313,19 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'قيد الانتظار',
     type: 'صالة',
     tableNumber: '2',
-    createdAt: new Date(Date.now() - 60000) // 1 minute ago
+    createdAt: new Date(Date.now() - 60000)
   },
   {
     id: 'o5',
     orderNumber: 'طلب-005',
-    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '8')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, notes: "دبل شوت"}], // ساندويتش و اسبريسو
+    items: [{ ...DUMMY_MENU_ITEMS.find(i => i.id === '8')!, quantity: 1 }, { ...DUMMY_MENU_ITEMS.find(i => i.id === '1')!, quantity: 1, notes: "دبل شوت"}],
     subtotal: 7.50 + 2.50,
     totalAmount: 10.00,
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '8',
-    createdAt: new Date(Date.now() - 1800000), // 30 minutes ago
-    kitchen_started_at: new Date(Date.now() - 900000) // 15 minutes ago
+    createdAt: new Date(Date.now() - 1800000),
+    kitchen_started_at: new Date(Date.now() - 900000)
   },
   {
     id: 'o6',
@@ -341,39 +336,39 @@ export let DUMMY_ORDERS: Order[] = [
     status: 'جاهز',
     type: 'سفري',
     customerName: 'سارة إبراهيم',
-    createdAt: new Date(Date.now() - 900000), // 15 minutes ago
-    kitchen_started_at: new Date(Date.now() - 700000), // ~11.6 minutes ago
-    kitchen_ready_at: new Date(Date.now() - 300000) // 5 minutes ago
+    createdAt: new Date(Date.now() - 900000),
+    kitchen_started_at: new Date(Date.now() - 700000),
+    kitchen_ready_at: new Date(Date.now() - 300000)
   },
   {
-    id: 'o7', // Order with items from multiple categories for testing
+    id: 'o7',
     orderNumber: 'طلب-007',
     items: [
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1 }, // مأكولات
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 2, notes: "حليب قليل الدسم" }, // مشروبات
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }  // حلويات
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '3')!, quantity: 1 },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '2')!, quantity: 2, notes: "حليب قليل الدسم" },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '5')!, quantity: 1 }
     ],
     subtotal: 8.00 + (3.50 * 2) + 5.00,
     totalAmount: 20.00,
     status: 'قيد الانتظار',
     type: 'صالة',
     tableNumber: '1',
-    createdAt: new Date(Date.now() - 300000), // 5 minutes ago
+    createdAt: new Date(Date.now() - 300000),
   },
   {
-    id: 'o8', // Another multi-category order
+    id: 'o8',
     orderNumber: 'طلب-008',
     items: [
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === 'm10')!, quantity: 1 }, // مأكولات (سلطة سيزر)
-      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 }, // شيشة
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === 'm10')!, quantity: 1 },
+      { ...DUMMY_MENU_ITEMS.find(i => i.id === '6')!, quantity: 1 },
     ],
     subtotal: 6.50 + 15.00,
     totalAmount: 21.50,
     status: 'قيد التجهيز',
     type: 'صالة',
     tableNumber: '9',
-    createdAt: new Date(Date.now() - 720000), // 12 minutes ago
-    kitchen_started_at: new Date(Date.now() - 420000) // 7 minutes ago
+    createdAt: new Date(Date.now() - 720000),
+    kitchen_started_at: new Date(Date.now() - 420000)
   }
 ];
 
@@ -393,7 +388,7 @@ export const DUMMY_TABLES: Table[] = [
   { id: 't2', number: '2', status: 'مشغولة', capacity: 2, orderId: 'o4' },
   { id: 't3', number: '3', status: 'محجوزة', capacity: 6 },
   { id: 't4', number: '4', status: 'متاحة', capacity: 4 },
-  { id: 't5', number: '5', status: 'تحتاج تنظيف', capacity: 2 }, // Was 'o1' table
+  { id: 't5', number: '5', status: 'تحتاج تنظيف', capacity: 2 },
   { id: 't6', number: '6', status: 'متاحة', capacity: 8 },
   { id: 't7', number: '7', status: 'متاحة', capacity: 4 },
   { id: 't8', number: '8', status: 'مشغولة', capacity: 2, orderId: 'o5' },
@@ -472,7 +467,6 @@ export let DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [
     }
 ];
 
-// Employee Management Types
 export type EmployeeRole = "كاشير" | "مقدم طعام" | "شيف" | "مدير" | "عامل نظافة" | "محاسب";
 export const EMPLOYEE_ROLES: EmployeeRole[] = ["كاشير", "مقدم طعام", "شيف", "مدير", "عامل نظافة", "محاسب"];
 
@@ -494,7 +488,6 @@ export let DUMMY_EMPLOYEES: Employee[] = [
 ];
 
 
-// Customer Management Types
 export interface Customer {
   id: string;
   name: string;
@@ -513,11 +506,10 @@ export let DUMMY_CUSTOMERS: Customer[] = [
 ];
 
 
-// Review Management Types
 export interface Review {
   id: string;
   customerName: string;
-  rating: number; // 1 to 5
+  rating: number;
   comment?: string;
   reviewDate: Date;
   orderId?: string;
@@ -531,14 +523,13 @@ export let DUMMY_REVIEWS: Review[] = [
   { id: 'rev4', customerName: 'عبدالرحمن الشهري', rating: 5, comment: 'كل شيء رائع كالعادة، أفضل كابتشينو في المدينة.', reviewDate: new Date('2024-05-03'), menuItemName: 'كابتشينو' },
 ];
 
-// Attendance Management Types
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
-  employeeName?: string; // For display purposes
+  employeeName?: string;
   clockInTime: Date;
   clockOutTime?: Date;
-  attendanceDate: Date; // Just the date part of clockInTime
+  attendanceDate: Date;
   workDurationHours?: number;
   notes?: string;
 }
@@ -546,22 +537,21 @@ export interface AttendanceRecord {
 export let DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   {
     id: 'att1',
-    employeeId: 'emp3', // محمد عبدالله
-    clockInTime: new Date(new Date().setHours(8, 58, 0, 0)), // Today at 08:58 AM
-    clockOutTime: new Date(new Date().setHours(17, 5, 0, 0)), // Today at 05:05 PM
+    employeeId: 'emp3',
+    clockInTime: new Date(new Date().setHours(8, 58, 0, 0)),
+    clockOutTime: new Date(new Date().setHours(17, 5, 0, 0)),
     attendanceDate: new Date(new Date().setHours(0,0,0,0)),
-    workDurationHours: 8.11, // Approximately
+    workDurationHours: 8.11,
   },
   {
     id: 'att2',
-    employeeId: 'emp4', // فاطمة حسين
-    clockInTime: new Date(new Date().setHours(9, 10, 0, 0)), // Today at 09:10 AM
+    employeeId: 'emp4',
+    clockInTime: new Date(new Date().setHours(9, 10, 0, 0)),
     attendanceDate: new Date(new Date().setHours(0,0,0,0)),
-    // No clockOutTime yet
   },
   {
     id: 'att3',
-    employeeId: 'emp3', // محمد عبدالله (Yesterday)
+    employeeId: 'emp3',
     clockInTime: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(9, 0, 0, 0)),
     clockOutTime: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(17, 15, 0, 0)),
     attendanceDate: new Date(new Date(new Date().setDate(new Date().getDate() -1)).setHours(0,0,0,0)),
@@ -569,41 +559,42 @@ export let DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [
   },
 ];
 
-// User Management (System Users, Roles, Permissions) - Basic Structure
 export interface SystemUser {
   id: string;
   username: string;
-  hashedPassword?: string; // Should not be in frontend constants
+  hashedPassword?: string;
   employeeId?: string;
   fullName?: string;
-  roles: string[]; // Array of role IDs or names
+  roles: string[]; // Array of role IDs
   isActive: boolean;
 }
 
 export interface Role {
   id: string;
-  name: string; // e.g., 'Admin', 'Cashier'
+  name: string;
   description?: string;
-  permissions: string[]; // Array of permission keys
+  permissions: string[];
 }
 
-export interface Permission {
-  id: string; // e.g., 'manage_menu', 'view_reports'
-  name: string; // User-friendly name for the permission
-  groupName?: string; // For UI grouping
-}
-
-export const DUMMY_SYSTEM_USERS: SystemUser[] = [
-    { id: 'user1', username: 'admin', employeeId: 'emp1', fullName: 'أحمد خالد (مدير)', roles: ['admin', 'manager'], isActive: true },
-    { id: 'user2', username: 'cashier1', employeeId: 'emp3', fullName: 'محمد عبدالله (كاشير)', roles: ['cashier'], isActive: true },
-    { id: 'user3', username: 'chef_sara', employeeId: 'emp2', fullName: 'سارة علي (شيف)', roles: ['chef'], isActive: true },
+export const DUMMY_PERMISSIONS_LIST: string[] = [
+  'view_dashboard', 'manage_pos', 'manage_menu', 'view_kitchen_screen', 'manage_tables',
+  'manage_inventory_view', 'manage_inventory_edit', 'manage_employees_view', 'manage_employees_edit',
+  'record_attendance_own', 'record_attendance_others', 'view_attendance_report',
+  'manage_customers', 'view_reviews', 'view_orders_history', 'view_reports_sales',
+  'view_reports_financial', 'manage_app_settings', 'manage_system_users'
 ];
 
-export const DUMMY_ROLES: Role[] = [
-    { id: 'admin', name: 'مسؤول النظام', description: 'صلاحيات كاملة على النظام', permissions: ['*'] }, // * means all permissions
+
+export let DUMMY_ROLES: Role[] = [
+    { id: 'admin', name: 'مسؤول النظام', description: 'صلاحيات كاملة على النظام', permissions: [...DUMMY_PERMISSIONS_LIST] },
     { id: 'manager', name: 'مدير', description: 'إدارة العمليات والموظفين والتقارير', permissions: ['view_dashboard', 'manage_pos', 'manage_menu', 'manage_employees_view', 'view_reports_sales'] },
     { id: 'cashier', name: 'كاشير', description: 'معالجة الطلبات والمدفوعات', permissions: ['manage_pos', 'view_orders_history'] },
-    { id: 'chef', name: 'شيف', description: 'إدارة المطبخ وحالة الطلبات', permissions: ['view_kitchen_screen', 'update_order_status_kitchen'] },
+    { id: 'chef', name: 'شيف', description: 'إدارة المطبخ وحالة الطلبات', permissions: ['view_kitchen_screen'] },
 ];
-// Permissions list would be much longer in a real system.
-// For now, the strings in DUMMY_ROLES.permissions are indicative.
+
+export let DUMMY_SYSTEM_USERS: SystemUser[] = [
+    { id: 'user1', username: 'admin', employeeId: 'emp1', fullName: 'أحمد خالد (مدير)', roles: ['admin', 'manager'], isActive: true, hashedPassword: 'hashed_password_example_admin' },
+    { id: 'user2', username: 'cashier1', employeeId: 'emp3', fullName: 'محمد عبدالله (كاشير)', roles: ['cashier'], isActive: true, hashedPassword: 'hashed_password_example_cashier' },
+    { id: 'user3', username: 'chef_sara', employeeId: 'emp2', fullName: 'سارة علي (شيف)', roles: ['chef'], isActive: true, hashedPassword: 'hashed_password_example_chef' },
+    { id: 'user4', username: 'manager_test', fullName: 'مدير تجريبي', roles: ['manager'], isActive: false, hashedPassword: 'hashed_password_example_manager' },
+];
