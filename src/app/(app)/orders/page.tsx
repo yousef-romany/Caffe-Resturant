@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
-import { DUMMY_ORDERS, type Order, type OrderStatus, type OrderType } from '@/constants';
+import { type Order, type OrderStatus, type OrderType, type OrderItem as AppOrderItem } from '@/constants'; // Renamed OrderItem to AppOrderItem to avoid conflict
 import {
   Table,
   TableBody,
@@ -12,8 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from '@/components/ui/card'; // Added Card imports
-import { Label } from '@/components/ui/label'; // Added Label import
+import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,41 +24,165 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { Eye, Filter, RotateCcw } from 'lucide-react';
-import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale'; // Arabic locale for date-fns
+import { Eye, Filter, RotateCcw, ShoppingCart, PackageOpen } from 'lucide-react';
+import { format, parseISO, isValid } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogClose,
 } from "@/components/ui/dialog";
-import NextImage from 'next/image'; // Renamed to avoid conflict
+import NextImage from 'next/image';
 import { Separator } from '@/components/ui/separator';
-
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+import { useToast } from '@/hooks/use-toast';
 
 const ORDER_STATUSES: OrderStatus[] = ["قيد الانتظار", "قيد التجهيز", "جاهز", "مكتمل", "ملغى"];
 const ORDER_TYPES: OrderType[] = ["صالة", "سفري", "توصيل"];
 
+// Interface for Order fetched from DB (basic info)
+interface FetchedOrder {
+  id: string;
+  order_number: string;
+  created_at: string; // ISO string from DB
+  type: OrderType;
+  customer_name?: string;
+  table_number?: string; // Will be fetched if table_id exists
+  captain_name?: string;
+  total_amount: number;
+  status: OrderStatus;
+  // Fields that might be needed for display from JOINs or further processing
+  table_id?: string; // From orders table
+}
+
+// Interface for detailed order item from DB
+interface DetailedOrderItem {
+  id: string;
+  menu_item_name: string;
+  quantity: number;
+  price_at_order: number;
+  notes?: string;
+  image_url?: string; // Assuming we can get this, or a placeholder
+  data_ai_hint?: string;
+}
+
+
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [orders, setOrders] = useState<FetchedOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'الكل'>('الكل');
   const [typeFilter, setTypeFilter] = useState<OrderType | 'الكل'>('الكل');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isClient, setIsClient] = useState(false);
+  
+  const [selectedOrder, setSelectedOrder] = useState<FetchedOrder | null>(null);
+  const [detailedOrderItems, setDetailedOrderItems] = useState<DetailedOrderItem[]>([]);
+  const [isFetchingOrderDetails, setIsFetchingOrderDetails] = useState(false);
 
   useEffect(() => {
-    setIsClient(true);
-    setOrders(DUMMY_ORDERS.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()));
-  }, []);
+    async function loadDbAndFetchOrders() {
+      try {
+        const dbInstance = await getDb();
+        if (!dbInstance) {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
+        setDbInstance(dbInstance);
+        await fetchOrders(dbInstance);
+      } catch (error) {
+        console.error("Failed to initialize DB or fetch orders:", error);
+        toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات الطلبات.", variant: "destructive" });
+        setIsLoading(false);
+      }
+    }
+    loadDbAndFetchOrders();
+  }, [toast]);
+
+  const fetchOrders = async (currentDb: Database) => {
+    if (!currentDb) return;
+    setIsLoading(true);
+    try {
+      // Fetch orders and join with tables_info to get table_number if available
+      const fetchedOrders: any[] = await currentDb.select(`
+        SELECT 
+          o.id, 
+          o.order_number, 
+          o.created_at, 
+          o.type, 
+          o.customer_name, 
+          o.captain_name,
+          o.total_amount, 
+          o.status,
+          ti.number as table_number 
+        FROM orders o
+        LEFT JOIN tables_info ti ON o.table_id = ti.id
+        ORDER BY o.created_at DESC
+      `);
+      setOrders(fetchedOrders.map(order => ({
+        ...order,
+        total_amount: Number(order.total_amount) || 0,
+      })));
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      toast({ title: "خطأ", description: "فشل في جلب بيانات الطلبات.", variant: "destructive" });
+      setOrders([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleViewOrderDetails = async (order: FetchedOrder) => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return;
+    }
+    setSelectedOrder(order);
+    setIsFetchingOrderDetails(true);
+    setDetailedOrderItems([]); // Clear previous items
+    try {
+      const items: any[] = await db.select(
+        `SELECT 
+          oi.id, 
+          oi.menu_item_name, 
+          oi.quantity, 
+          oi.price_at_order, 
+          oi.notes,
+          mi.image_url, 
+          mi.data_ai_hint 
+         FROM order_items oi
+         LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+         WHERE oi.order_id = $1`,
+        [order.id]
+      );
+      setDetailedOrderItems(items.map(item => ({
+        ...item,
+        quantity: Number(item.quantity) || 0,
+        price_at_order: Number(item.price_at_order) || 0,
+        image_url: item.image_url || 'https://placehold.co/50x50.png', // Default placeholder
+        data_ai_hint: item.data_ai_hint || 'food item'
+      })));
+    } catch (error) {
+      console.error("Error fetching order items:", error);
+      toast({ title: "خطأ", description: "فشل في جلب تفاصيل عناصر الطلب.", variant: "destructive" });
+      setDetailedOrderItems([]);
+    } finally {
+      setIsFetchingOrderDetails(false);
+    }
+  };
+
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order =>
-      (order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       (order.customerName && order.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-       (order.tableNumber && order.tableNumber.includes(searchTerm))) &&
+      (order.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       (order.customer_name && order.customer_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+       (order.table_number && order.table_number.includes(searchTerm))) &&
       (statusFilter === 'الكل' || order.status === statusFilter) &&
       (typeFilter === 'الكل' || order.type === typeFilter)
     );
@@ -83,7 +207,7 @@ export default function OrdersPage() {
 
   return (
     <>
-      <PageHeader title="سجل الطلبات" description="عرض وإدارة جميع طلبات العملاء." />
+      <PageHeader title="سجل الطلبات" description="عرض وإدارة جميع طلبات العملاء." icon={ShoppingCart} />
 
       <div className="mb-6 p-4 bg-card rounded-lg shadow">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
@@ -134,98 +258,117 @@ export default function OrdersPage() {
 
       <Card className="shadow-lg">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>رقم الطلب</TableHead>
-                <TableHead>التاريخ</TableHead>
-                <TableHead>النوع</TableHead>
-                <TableHead>التفاصيل</TableHead> {/* For Customer/Table/Captain */}
-                <TableHead className="text-left">المبلغ</TableHead> {/* Changed to text-left for RTL */}
-                <TableHead>الحالة</TableHead>
-                <TableHead className="text-center">الإجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isClient && filteredOrders.length > 0 ? (
-                filteredOrders.map(order => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                    <TableCell>{format(new Date(order.createdAt), 'PPpp', { locale: arSA })}</TableCell>
-                    <TableCell>{order.type}</TableCell>
-                    <TableCell>
-                      {order.type === 'صالة' && order.tableNumber && `طاولة: ${order.tableNumber}`}
-                      {order.type === 'توصيل' && order.customerName && `${order.customerName}`}
-                      {order.type === 'توصيل' && order.captainName && ` (الكابتن: ${order.captainName})`}
-                      {order.type === 'سفري' && order.customerName && `${order.customerName}`}
-                    </TableCell>
-                    <TableCell className="text-left">${order.totalAmount.toFixed(2)}</TableCell> {/* Changed to text-left for RTL */}
-                    <TableCell>
-                      <Badge variant={getStatusBadgeVariant(order.status)} className="text-xs">
-                        {order.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="ghost" size="icon" onClick={() => setSelectedOrder(order)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
+           {isLoading ? (
+            <p className="text-center text-muted-foreground p-10">جارٍ تحميل الطلبات...</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>رقم الطلب</TableHead>
+                  <TableHead>التاريخ</TableHead>
+                  <TableHead>النوع</TableHead>
+                  <TableHead>التفاصيل</TableHead>
+                  <TableHead className="text-left">المبلغ</TableHead>
+                  <TableHead>الحالة</TableHead>
+                  <TableHead className="text-center">الإجراءات</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.length > 0 ? (
+                  filteredOrders.map(order => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium">{order.order_number}</TableCell>
+                      <TableCell>
+                        {isValid(parseISO(order.created_at)) 
+                          ? format(parseISO(order.created_at), 'PPpp', { locale: arSA }) 
+                          : 'تاريخ غير صالح'}
+                      </TableCell>
+                      <TableCell>{order.type}</TableCell>
+                      <TableCell>
+                        {order.type === 'صالة' && order.table_number && `طاولة: ${order.table_number}`}
+                        {order.type === 'توصيل' && order.customer_name && `${order.customer_name}`}
+                        {order.type === 'توصيل' && order.captain_name && ` (الكابتن: ${order.captain_name})`}
+                        {order.type === 'سفري' && order.customer_name && `${order.customer_name}`}
+                        {(!order.table_number && !order.customer_name && !order.captain_name && (order.type === 'صالة' || order.type === 'توصيل' || order.type === 'سفري')) && '-'}
+                      </TableCell>
+                      <TableCell className="text-left">${order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(order.status)} className="text-xs">
+                          {order.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      {orders.length === 0 ? "لا توجد طلبات مسجلة بعد." : "لا توجد طلبات تطابق الفلاتر المحددة."}
                     </TableCell>
                   </TableRow>
-                ))
-              ) : isClient ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
-                    لم يتم العثور على طلبات.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
-                    جارٍ تحميل الطلبات...
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
       {selectedOrder && (
-        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+        <Dialog open={!!selectedOrder} onOpenChange={() => {setSelectedOrder(null); setDetailedOrderItems([]);}}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>تفاصيل الطلب: {selectedOrder.orderNumber}</DialogTitle>
+              <DialogTitle>تفاصيل الطلب: {selectedOrder.order_number}</DialogTitle>
               <DialogDescription>
-                التاريخ: {format(new Date(selectedOrder.createdAt), 'PPpp', { locale: arSA })}
+                التاريخ: {isValid(parseISO(selectedOrder.created_at)) ? format(parseISO(selectedOrder.created_at), 'PPpp', { locale: arSA }) : 'تاريخ غير صالح'}
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 max-h-[60vh] overflow-y-auto ps-2 space-y-4">
               <p><strong>الحالة:</strong> <Badge variant={getStatusBadgeVariant(selectedOrder.status)}>{selectedOrder.status}</Badge></p>
               <p><strong>النوع:</strong> {selectedOrder.type}</p>
-              {selectedOrder.type === 'صالة' && selectedOrder.tableNumber && <p><strong>الطاولة:</strong> {selectedOrder.tableNumber}</p>}
-              {selectedOrder.customerName && <p><strong>العميل:</strong> {selectedOrder.customerName}</p>}
-              {selectedOrder.type === 'توصيل' && selectedOrder.deliveryAddress && <p><strong>العنوان:</strong> {selectedOrder.deliveryAddress}</p>}
-              {selectedOrder.type === 'توصيل' && selectedOrder.captainName && <p><strong>الكابتن:</strong> {selectedOrder.captainName}</p>}
+              {selectedOrder.type === 'صالة' && selectedOrder.table_number && <p><strong>الطاولة:</strong> {selectedOrder.table_number}</p>}
+              {selectedOrder.customer_name && <p><strong>العميل:</strong> {selectedOrder.customer_name}</p>}
+              {/* {selectedOrder.type === 'توصيل' && selectedOrder.deliveryAddress && <p><strong>العنوان:</strong> {selectedOrder.deliveryAddress}</p>} */}
+              {selectedOrder.type === 'توصيل' && selectedOrder.captain_name && <p><strong>الكابتن:</strong> {selectedOrder.captain_name}</p>}
               
-              <h4 className="font-semibold mt-4">العناصر:</h4>
-              <ul className="space-y-2">
-                {selectedOrder.items.map(item => (
-                  <li key={item.id} className="flex items-start gap-3 p-2 border rounded-md">
-                    <NextImage src={item.imageUrl} alt={item.name} width={50} height={50} className="rounded-md h-12 w-12 object-cover" data-ai-hint={item.dataAiHint || "food item"}/>
-                    <div className="flex-grow">
-                      <p className="font-medium">{item.name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
-                      <p className="text-sm text-muted-foreground">${item.price.toFixed(2)} لكل عنصر</p>
-                      {item.notes && <p className="text-xs text-blue-600 italic">ملاحظات: {item.notes}</p>}
-                    </div>
-                    <p className="font-medium text-sm">${(item.price * item.quantity).toFixed(2)}</p>
-                  </li>
-                ))}
-              </ul>
+              <h4 className="font-semibold mt-4 flex items-center gap-1"><PackageOpen className="h-5 w-5 text-primary"/> العناصر:</h4>
+              {isFetchingOrderDetails ? (
+                <p className="text-center text-muted-foreground py-4">جارٍ تحميل عناصر الطلب...</p>
+              ) : detailedOrderItems.length > 0 ? (
+                <ul className="space-y-2">
+                  {detailedOrderItems.map(item => (
+                    <li key={item.id} className="flex items-start gap-3 p-2 border rounded-md">
+                      <NextImage 
+                        src={item.image_url || 'https://placehold.co/50x50.png'} 
+                        alt={item.menu_item_name} 
+                        width={50} 
+                        height={50} 
+                        className="rounded-md h-12 w-12 object-cover" 
+                        data-ai-hint={item.data_ai_hint || "food item"}
+                      />
+                      <div className="flex-grow">
+                        <p className="font-medium">{item.menu_item_name} <span className="text-muted-foreground text-sm">x {item.quantity}</span></p>
+                        <p className="text-sm text-muted-foreground">${item.price_at_order.toFixed(2)} لكل عنصر</p>
+                        {item.notes && <p className="text-xs text-blue-600 italic">ملاحظات: {item.notes}</p>}
+                      </div>
+                      <p className="font-medium text-sm">${(item.price_at_order * item.quantity).toFixed(2)}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-center text-muted-foreground py-4">لا توجد عناصر في هذا الطلب.</p>
+              )}
               <Separator className="my-3"/>
-              <div className="flex justify-start items-center"> {/* Changed to justify-start for RTL */}
-                <p className="text-lg font-bold">الإجمالي: ${selectedOrder.totalAmount.toFixed(2)}</p>
+              <div className="flex justify-start items-center">
+                <p className="text-lg font-bold">الإجمالي: ${selectedOrder.total_amount.toFixed(2)}</p>
               </div>
             </div>
+            <DialogClose asChild>
+                <Button variant="outline" className="mt-4 w-full">إغلاق</Button>
+            </DialogClose>
           </DialogContent>
         </Dialog>
       )}
