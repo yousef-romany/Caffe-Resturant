@@ -6,7 +6,7 @@ import NextImage from 'next/image';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { type Order, type OrderStatus, type OrderItem, KITCHEN_CATEGORY_ICONS, type Category, CATEGORY_SLUG_MAP, type CategorySlug, CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES, DUMMY_MENU_ITEMS } from '@/constants';
+import { type Order, type OrderStatus, type OrderItem, type OrderType, KITCHEN_CATEGORY_ICONS, type Category, CATEGORY_SLUG_MAP, type CategorySlug, CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES } from '@/constants';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { ChefHat, CheckCircle2, CookingPot, Clock, AlertTriangle, Ban } from 'lucide-react';
@@ -23,8 +23,8 @@ const PREPARING_LATE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
 interface KitchenOrderCardProps {
   order: Order;
-  onStartPreparing: (orderId: string) => void;
-  onMarkAsReady: (orderId: string) => void;
+  onStartPreparing: (orderId: string, newStatus: OrderStatus) => void; // Pass newStatus
+  onMarkAsReady: (orderId: string, newStatus: OrderStatus) => void; // Pass newStatus
   displayCategory: Category;
   isLate: boolean;
 }
@@ -85,9 +85,9 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
       <ScrollArea className="flex-grow">
         <CardContent className="py-0 ">
           <ul className="space-y-2">
-            {itemsToDisplay.map(item => (
-              <li key={`${item.id}-${item.notes || 'no-notes'}`} className="flex items-start gap-2 p-2 border-b last:border-b-0">
-                <NextImage src={item.imageUrl || 'https://placehold.co/50x50.png'} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"} />
+            {itemsToDisplay.map((item, index) => ( // Added index for key uniqueness if notes are null
+              <li key={`${item.id}-${item.notes || 'no-notes'}-${index}`} className="flex items-start gap-2 p-2 border-b last:border-b-0">
+                <NextImage src={item.imageUrl || 'https://placehold.co/50x50.png'} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
                 <div className="flex-grow">
                   <p className="font-medium text-sm">{item.name} <span className="text-muted-foreground text-xs">x {item.quantity}</span></p>
                   {item.notes && <p className="text-xs text-blue-600 italic mt-0.5">ملاحظات: {item.notes}</p>}
@@ -99,13 +99,13 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
       </ScrollArea>
       <CardFooter className="pt-3">
         {order.status === 'قيد الانتظار' && (
-          <Button onClick={() => onStartPreparing(order.id)} className="w-full bg-amber-500 hover:bg-amber-600 text-white">
+          <Button onClick={() => onStartPreparing(order.id, 'قيد التجهيز')} className="w-full bg-amber-500 hover:bg-amber-600 text-white">
             <CookingPot className="h-4 w-4 me-2" />
             بدء تجهيز الطلب
           </Button>
         )}
         {order.status === 'قيد التجهيز' && (
-          <Button onClick={() => onMarkAsReady(order.id)} className="w-full bg-green-500 hover:bg-green-600 text-white">
+          <Button onClick={() => onMarkAsReady(order.id, 'جاهز')} className="w-full bg-green-500 hover:bg-green-600 text-white">
             <CheckCircle2 className="h-4 w-4 me-2" />
             تم الانتهاء (جاهز)
           </Button>
@@ -126,18 +126,16 @@ export default function KitchenDisplayPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategorySlug, setActiveCategorySlug] = useState<CategorySlug | null>(null);
   const [activeCategoryInfo, setActiveCategoryInfo] = useState<{ name: Category; icon: LucideIcon; slug: CategorySlug } | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState(true); // Assume authorized until checked
+  const [isAuthorized, setIsAuthorized] = useState(true);
 
   const fetchOrdersForCategory = useCallback(async (categoryName: Category, currentDb: Database) => {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      // Fetch orders that are pending or preparing
       const fetchedOrdersRaw: any[] = await currentDb.select(
         "SELECT id, order_number, type, status, created_at, kitchen_started_at, table_id FROM orders WHERE status IN ('قيد الانتظار', 'قيد التجهيز') ORDER BY created_at ASC"
       );
 
-      // Fetch table numbers for dine-in orders
       const tableIds = fetchedOrdersRaw.filter(o => o.table_id).map(o => o.table_id);
       let tableNumberMap: Record<string, string> = {};
       if (tableIds.length > 0) {
@@ -161,25 +159,27 @@ export default function KitchenDisplayPage() {
         );
 
         const items: OrderItem[] = itemsRaw.map(item => ({
-          ...item,
+          id: item.id, // This is menu_item_id
+          name: item.name, // This is menu_item_name
+          category: item.category as Category, // From menu_items table
+          price: Number(item.price), // price_at_order
           quantity: Number(item.quantity),
-          price: Number(item.price),
-          // Ensure all fields from OrderItem are present
-          category: item.category as Category,
+          imageUrl: item.imageUrl || 'https://placehold.co/50x50.png',
+          dataAiHint: item.dataAiHint || 'food item',
+          notes: item.notes,
         }));
         
-        // Filter orders to include only those that have at least one item of the current category
         if (items.some(item => item.category === categoryName)) {
           ordersWithItems.push({
             id: orderRaw.id,
             orderNumber: orderRaw.order_number,
             type: orderRaw.type as OrderType,
             status: orderRaw.status as OrderStatus,
-            createdAt: parseISO(orderRaw.created_at), // Ensure dates are parsed
+            createdAt: parseISO(orderRaw.created_at),
             kitchen_started_at: orderRaw.kitchen_started_at ? parseISO(orderRaw.kitchen_started_at) : undefined,
             tableNumber: orderRaw.table_id ? tableNumberMap[orderRaw.table_id] : undefined,
             items: items,
-            totalAmount: 0, // Not strictly needed for kitchen display card, but part of Order interface
+            totalAmount: 0, // Placeholder for kitchen display context
           });
         }
       }
@@ -200,25 +200,25 @@ export default function KitchenDisplayPage() {
 
       const categoryParam = searchParams.get('category') as CategorySlug | null;
       let slugToLoad: CategorySlug | null = categoryParam;
+      let categoryInfo: { name: Category; icon: LucideIcon; slug: CategorySlug } | null = null;
 
-      if (!slugToLoad) {
-        slugToLoad = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
+      if (slugToLoad) {
+        categoryInfo = CATEGORY_SLUG_MAP[slugToLoad] || null;
+      } else {
+        const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
+        if (storedSlug) {
+          slugToLoad = storedSlug;
+          categoryInfo = CATEGORY_SLUG_MAP[slugToLoad] || null;
+        }
       }
       
-      let categoryInfo = slugToLoad ? CATEGORY_SLUG_MAP[slugToLoad] : null;
+      const isUserAuthorizedForCategory = (catInfo: typeof categoryInfo) => {
+        if (!catInfo) return false;
+        return CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length === 0 || 
+               CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(catInfo.name);
+      };
 
-      // Authorization check
-      const authorized = !categoryInfo || CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length === 0 || CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(categoryInfo.name);
-      setIsAuthorized(authorized);
-
-      if (!authorized && categoryInfo) {
-        setActiveCategoryInfo(categoryInfo); // Set info even if not authorized, for the message
-        setIsLoading(false);
-        return;
-      }
-
-      if (!categoryInfo || !authorized) {
-        // Fallback to first authorized category or first category in general
+      if (!categoryInfo || !isUserAuthorizedForCategory(categoryInfo)) {
         const fallbackSlug = CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0
           ? Object.values(CATEGORY_SLUG_MAP).find(c => CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(c.name))?.slug
           : Object.values(CATEGORY_SLUG_MAP)[0]?.slug;
@@ -228,21 +228,23 @@ export default function KitchenDisplayPage() {
           categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
         }
       }
+      
+      setIsAuthorized(isUserAuthorizedForCategory(categoryInfo));
 
       if (categoryInfo) {
         setActiveCategorySlug(categoryInfo.slug);
         setActiveCategoryInfo(categoryInfo);
-        localStorage.setItem('selectedKitchenCategorySlug', categoryInfo.slug);
+        if (slugToLoad) localStorage.setItem('selectedKitchenCategorySlug', slugToLoad);
+        
         if (categoryParam && categoryParam !== categoryInfo.slug) {
-          router.replace('/kitchen-display'); // Clean URL if param was invalid/unauthorized but we found a fallback
+          router.replace('/kitchen-display'); 
         } else if (categoryParam) {
-           router.replace('/kitchen-display'); // Always clean URL after processing param
+           router.replace('/kitchen-display'); 
         }
         if (dbInstance) {
           fetchOrdersForCategory(categoryInfo.name, dbInstance);
         }
       } else {
-        // No valid category could be determined
         setActiveCategoryInfo(null);
         setIsLoading(false);
         toast({ title: "خطأ", description: "لم يتم تحديد قسم صالح للمطبخ.", variant: "destructive" });
@@ -264,11 +266,9 @@ export default function KitchenDisplayPage() {
     } else if (newStatus === 'جاهز') {
       sql += `, kitchen_ready_at = ?`;
       params.push(now);
-      // Ensure kitchen_started_at is set if it wasn't (e.g. order went from pending directly to ready somehow by mistake)
-      // This is an edge case, usually it should be set when moving to 'قيد التجهيز'
       const order = orders.find(o => o.id === orderId);
       if (order && !order.kitchen_started_at) {
-        sql += `, kitchen_started_at = ?`;
+        sql += `, kitchen_started_at = ?`; // Set started_at if somehow missed
         params.push(order.createdAt.toISOString()); 
       }
     }
@@ -277,7 +277,7 @@ export default function KitchenDisplayPage() {
 
     try {
       await db.execute(sql, params);
-      fetchOrdersForCategory(activeCategoryInfo.name, db); // Re-fetch orders for the current category
+      fetchOrdersForCategory(activeCategoryInfo.name, db);
       toast({
         title: newStatus === 'قيد التجهيز' ? "بدء التجهيز" : "تم الانتهاء",
         description: `تم تحديث حالة الطلب بنجاح.`,
@@ -301,11 +301,11 @@ export default function KitchenDisplayPage() {
     return false;
   };
 
-  if (isLoading && !activeCategoryInfo) { // Initial loading before category is determined
+  if (isLoading && !activeCategoryInfo) {
     return (
       <>
         <PageHeader title="شاشة المطبخ" description="جارٍ تحميل بيانات المطبخ..." />
-        <p className="text-center text-muted-foreground py-10">جارٍ التحميل...</p>
+        <p className="text-center text-muted-foreground py-10">يرجى الانتظار...</p>
       </>
     );
   }
@@ -346,7 +346,6 @@ export default function KitchenDisplayPage() {
          <p className="text-center text-muted-foreground py-10">جارٍ تحميل طلبات قسم {activeCategoryInfo.name}...</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-12rem)]">
-          {/* Pending Orders Column */}
           <div className="flex flex-col bg-card p-4 rounded-lg shadow-md">
             <h3 className="text-lg font-medium text-yellow-600 mb-3 pb-2 border-b flex items-center">
               <Clock className="h-5 w-5 me-2" /> طلبات جديدة ({pendingOrders.length})
@@ -373,7 +372,6 @@ export default function KitchenDisplayPage() {
             )}
           </div>
 
-          {/* Preparing Orders Column */}
           <div className="flex flex-col bg-card p-4 rounded-lg shadow-md">
             <h3 className="text-lg font-medium text-blue-600 mb-3 pb-2 border-b flex items-center">
               <CookingPot className="h-5 w-5 me-2" /> طلبات قيد التجهيز ({preparingOrders.length})
@@ -404,4 +402,6 @@ export default function KitchenDisplayPage() {
     </>
   );
 }
+    
+
     
