@@ -10,23 +10,133 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Info, Percent, Tag } from 'lucide-react'; // Added Percent, Tag
+import { Info, Percent, Tag, Save } from 'lucide-react';
 import Link from 'next/link';
-import { DEFAULT_VAT_PERCENTAGE } from '@/constants'; // Import default VAT
+import { useToast } from '@/hooks/use-toast';
+import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+
+// Define setting keys as constants for consistency
+const SETTING_KEYS = {
+  STORE_NAME: 'STORE_NAME',
+  STORE_ADDRESS: 'STORE_ADDRESS',
+  STORE_CONTACT_PHONE: 'STORE_CONTACT_PHONE',
+  IS_VAT_ENABLED: 'IS_VAT_ENABLED',
+  VAT_PERCENTAGE: 'VAT_PERCENTAGE',
+  IS_GLOBAL_DISCOUNT_ENABLED: 'IS_GLOBAL_DISCOUNT_ENABLED',
+  GLOBAL_DISCOUNT_PERCENTAGE: 'GLOBAL_DISCOUNT_PERCENTAGE',
+};
 
 export default function SettingsPage() {
-  // State for Tax and Discount settings
-  // In a real app, these would be fetched from a backend/localStorage
+  const { toast } = useToast();
+  const [db, setDbInstance] = useState<Database | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Store Information State
+  const [storeName, setStoreName] = useState('كافيه بوس إكسبريس');
+  const [storeAddress, setStoreAddress] = useState('123 الشارع الرئيسي, أي مدينة');
+  const [storeContactPhone, setStoreContactPhone] = useState('+1 (555) 123-4567');
+
+  // Tax and Discount State
   const [isVatEnabled, setIsVatEnabled] = useState(true);
-  const [vatPercentage, setVatPercentage] = useState(DEFAULT_VAT_PERCENTAGE);
+  const [vatPercentage, setVatPercentage] = useState(14); // Default from original constant
   const [isGlobalDiscountEnabled, setIsGlobalDiscountEnabled] = useState(false);
   const [globalDiscountPercentage, setGlobalDiscountPercentage] = useState(0);
 
-  const handleSaveTaxDiscountSettings = () => {
-    // In a real app, save these settings to backend/localStorage
-    console.log({ isVatEnabled, vatPercentage, isGlobalDiscountEnabled, globalDiscountPercentage });
-    alert("تم حفظ إعدادات الضريبة والخصم (تجريبي).");
+  useEffect(() => {
+    async function initializeDbAndLoadSettings() {
+      try {
+        const dbInstance = await getDb();
+        setDbInstance(dbInstance);
+        if (dbInstance) {
+          await loadAllSettings(dbInstance);
+        } else {
+          toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات. لا يمكن تحميل الإعدادات.", variant: "destructive" });
+        }
+      } catch (error) {
+        console.error("Error initializing DB for settings:", error);
+        toast({ title: "خطأ في التهيئة", description: "فشل تهيئة قاعدة البيانات للإعدادات.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    initializeDbAndLoadSettings();
+  }, [toast]); // toast is stable
+
+  const loadAllSettings = async (currentDb: Database) => {
+    setIsLoading(true);
+    try {
+      const settingsResult: any[] = await currentDb.select('SELECT setting_key, setting_value FROM app_settings');
+      const settingsMap = new Map(settingsResult.map(s => [s.setting_key, s.setting_value]));
+
+      setStoreName(settingsMap.get(SETTING_KEYS.STORE_NAME) || 'كافيه بوس إكسبريس');
+      setStoreAddress(settingsMap.get(SETTING_KEYS.STORE_ADDRESS) || '123 الشارع الرئيسي, أي مدينة');
+      setStoreContactPhone(settingsMap.get(SETTING_KEYS.STORE_CONTACT_PHONE) || '+1 (555) 123-4567');
+
+      setIsVatEnabled(settingsMap.get(SETTING_KEYS.IS_VAT_ENABLED) === 'true');
+      setVatPercentage(parseFloat(settingsMap.get(SETTING_KEYS.VAT_PERCENTAGE) || '14'));
+      setIsGlobalDiscountEnabled(settingsMap.get(SETTING_KEYS.IS_GLOBAL_DISCOUNT_ENABLED) === 'true');
+      setGlobalDiscountPercentage(parseFloat(settingsMap.get(SETTING_KEYS.GLOBAL_DISCOUNT_PERCENTAGE) || '0'));
+
+    } catch (error) {
+      console.error("Error loading settings:", error);
+      toast({ title: "خطأ", description: "فشل تحميل الإعدادات من قاعدة البيانات.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const saveSetting = async (key: string, value: string) => {
+    if (!db) {
+      toast({ title: "خطأ", description: "قاعدة البيانات غير متاحة.", variant: "destructive" });
+      return false;
+    }
+    try {
+      // Attempt to update; if no rows affected, then insert (UPSERT logic)
+      const updateResult: any = await db.execute(
+        "UPDATE app_settings SET setting_value = $1, updated_at = CURRENT_TIMESTAMP WHERE setting_key = $2",
+        [value, key]
+      );
+
+      if (updateResult.rowsAffected === 0) {
+        await db.execute(
+          "INSERT INTO app_settings (setting_key, setting_value) VALUES ($1, $2)",
+          [key, value]
+        );
+      }
+      return true;
+    } catch (error) {
+      console.error(`Error saving setting ${key}:`, error);
+      toast({ title: "خطأ في الحفظ", description: `فشل حفظ الإعداد: ${key}.`, variant: "destructive" });
+      return false;
+    }
+  };
+
+  const handleSaveStoreInfo = async () => {
+    let success = true;
+    success &&= await saveSetting(SETTING_KEYS.STORE_NAME, storeName);
+    success &&= await saveSetting(SETTING_KEYS.STORE_ADDRESS, storeAddress);
+    success &&= await saveSetting(SETTING_KEYS.STORE_CONTACT_PHONE, storeContactPhone);
+    if (success) {
+      toast({ title: "نجاح", description: "تم حفظ معلومات المتجر." });
+    }
+  };
+
+  const handleSaveTaxDiscountSettings = async () => {
+    let success = true;
+    success &&= await saveSetting(SETTING_KEYS.IS_VAT_ENABLED, isVatEnabled.toString());
+    success &&= await saveSetting(SETTING_KEYS.VAT_PERCENTAGE, vatPercentage.toString());
+    success &&= await saveSetting(SETTING_KEYS.IS_GLOBAL_DISCOUNT_ENABLED, isGlobalDiscountEnabled.toString());
+    success &&= await saveSetting(SETTING_KEYS.GLOBAL_DISCOUNT_PERCENTAGE, globalDiscountPercentage.toString());
+    if (success) {
+      toast({ title: "نجاح", description: "تم حفظ إعدادات الضريبة والخصم." });
+    }
+  };
+
+  if (isLoading && !db) {
+    return <PageHeader title="الإعدادات" description="جارٍ تحميل الإعدادات..." />;
+  }
+
 
   return (
     <>
@@ -41,18 +151,20 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="storeName">اسم المتجر</Label>
-                <Input id="storeName" defaultValue="كافيه بوس إكسبريس" className="mt-1" />
+                <Input id="storeName" value={storeName} onChange={(e) => setStoreName(e.target.value)} className="mt-1" />
               </div>
               <div>
                 <Label htmlFor="storeAddress">العنوان</Label>
-                <Input id="storeAddress" defaultValue="123 الشارع الرئيسي, أي مدينة" className="mt-1" />
+                <Input id="storeAddress" value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} className="mt-1" />
               </div>
             </div>
             <div>
               <Label htmlFor="storeContact">هاتف الاتصال</Label>
-              <Input id="storeContact" defaultValue="+1 (555) 123-4567" className="mt-1" />
+              <Input id="storeContact" value={storeContactPhone} onChange={(e) => setStoreContactPhone(e.target.value)} className="mt-1" />
             </div>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">حفظ معلومات المتجر</Button>
+            <Button onClick={handleSaveStoreInfo} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Save className="h-4 w-4 me-2"/> حفظ معلومات المتجر
+            </Button>
           </CardContent>
         </Card>
 
@@ -133,7 +245,9 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-            <Button onClick={handleSaveTaxDiscountSettings} className="bg-primary hover:bg-primary/90 text-primary-foreground">حفظ إعدادات الضريبة والخصم</Button>
+            <Button onClick={handleSaveTaxDiscountSettings} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Save className="h-4 w-4 me-2"/> حفظ إعدادات الضريبة والخصم
+            </Button>
           </CardContent>
         </Card>
 
@@ -148,18 +262,18 @@ export default function SettingsPage() {
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="userName">اسمك</Label>
-                  <Input id="userName" defaultValue="المسؤول" className="mt-1" />
+                  <Input id="userName" defaultValue="المسؤول" className="mt-1" disabled/>
                 </div>
                 <div>
                   <Label htmlFor="userEmail">البريد الإلكتروني</Label>
-                  <Input id="userEmail" type="email" defaultValue="admin@example.com" className="mt-1" />
+                  <Input id="userEmail" type="email" defaultValue="admin@example.com" className="mt-1" disabled/>
                 </div>
             </div>
             <div>
               <Label htmlFor="userPassword">تغيير كلمة المرور</Label>
               <Input id="userPassword" type="password" placeholder="كلمة المرور الجديدة" className="mt-1" />
             </div>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">تحديث الحساب</Button>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled>تحديث الحساب (قريباً)</Button>
           </CardContent>
         </Card>
 
@@ -204,10 +318,12 @@ export default function SettingsPage() {
                 <Label htmlFor="kitchenPrinter">طابعة المطبخ</Label>
                 <Input id="kitchenPrinter" defaultValue="طابعة شبكة (LAN)" className="mt-1" disabled/>
             </div>
-            <Button disabled className="bg-primary hover:bg-primary/90 text-primary-foreground">تكوين الطابعات</Button>
+            <Button disabled className="bg-primary hover:bg-primary/90 text-primary-foreground">تكوين الطابعات (قريباً)</Button>
           </CardContent>
         </Card>
       </div>
     </>
   );
 }
+
+    
