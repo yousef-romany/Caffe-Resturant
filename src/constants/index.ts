@@ -29,7 +29,7 @@ export const KITCHEN_CATEGORY_ICONS: Record<Category, LucideIcon> = {
 
 export type CategorySlug = 'food' | 'drinks' | 'desserts' | 'hookah';
 
-export const CATEGORY_SLUG_MAP: Record<CategorySlug, { name: Category, icon: LucideIcon, slug: CategorySlug }> = {
+export const CATEGORY_SLUG_MAP: Record<CategorySlug, { name: Category; icon: LucideIcon; slug: CategorySlug }> = {
   'food': { name: 'مأكولات', icon: KITCHEN_CATEGORY_ICONS['مأكولات'], slug: 'food' },
   'drinks': { name: 'مشروبات', icon: KITCHEN_CATEGORY_ICONS['مشروبات'], slug: 'drinks' },
   'desserts': { name: 'حلويات', icon: KITCHEN_CATEGORY_ICONS['حلويات'], slug: 'desserts' },
@@ -38,20 +38,20 @@ export const CATEGORY_SLUG_MAP: Record<CategorySlug, { name: Category, icon: Luc
 
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard }, // Removed requiredPermission
+  { label: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard },
   { label: 'نقطة البيع', href: '/pos', icon: ShoppingCart, requiredPermission: 'manage_pos' },
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck, requiredPermission: 'manage_menu' },
   {
     label: 'شاشة المطبخ',
-    href: '/kitchen-display', // Main link for the accordion trigger itself
+    href: '/kitchen-display',
     icon: ChefHat,
     requiredPermission: 'view_kitchen_screen',
     children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
       label: catMap.name,
-      href: '/kitchen-display', // All children point to the same page
+      href: '/kitchen-display',
       icon: catMap.icon,
       slug: catMap.slug,
-      // Individual kitchen category links don't need specific permission here if parent has it
+      requiredPermission: 'view_kitchen_screen',
     })),
   },
   { label: 'الطاولات', href: '/tables', icon: TableIcon, requiredPermission: 'manage_tables' },
@@ -70,12 +70,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'الموظفين', href: '/employees', icon: UsersRound, requiredPermission: 'manage_employees_view' },
   {
     label: 'سجل الحضور',
-    href: '/attendance',
+    href: '/attendance', // Main link for the accordion trigger itself
     icon: CalendarClock,
-    requiredPermission: 'view_attendance_report', // Or 'record_attendance_own'
+    requiredPermission: 'view_attendance_report', // Or 'record_attendance_own' for base access
     children: [
-      { label: 'عرض السجل', href: '/attendance', icon: ListOrdered, requiredPermission: 'view_attendance_report' },
-      { label: 'مسح QR للحضور', href: '/employee-qr-attendance', icon: QrCode, requiredPermission: 'record_attendance_own' },
+      { label: 'عرض السجل', href: '/attendance', icon: ListOrdered, requiredPermission: 'view_attendance_report' }, // Specific permission for viewing reports
+      { label: 'مسح QR للحضور', href: '/employee-qr-attendance', icon: QrCode, requiredPermission: 'record_attendance_own' }, // Permission to use QR
     ]
   },
   { label: 'العملاء', href: '/customers', icon: Award, requiredPermission: 'manage_customers' },
@@ -87,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     requiredPermission: 'view_reports_sales', // General permission for accessing reports section
     children: [
-      { label: 'نظرة عامة', href: '/reports', icon: FileText, requiredPermission: 'view_reports_sales' },
+      { label: 'نظرة عامة', href: '/reports', icon: FileText, requiredPermission: 'view_reports_sales' }, // Or a more general view_reports
       { label: 'المبيعات', href: '/reports/sales', icon: TrendingUp, requiredPermission: 'view_reports_sales' },
       { label: 'المصروفات', href: '/reports/expenses', icon: TrendingDown, requiredPermission: 'view_reports_financial' },
       { label: 'ملخص مالي', href: '/reports/financials', icon: Landmark, requiredPermission: 'view_reports_financial' },
@@ -102,7 +102,7 @@ export const SETTINGS_NAV_ITEM: NavItem = {
   label: 'الإعدادات',
   href: '/settings',
   icon: Settings,
-  requiredPermission: 'manage_app_settings', // Base permission to see "Settings"
+  requiredPermission: 'manage_app_settings',
   children: [
     { label: 'إعدادات عامة', href: '/settings', icon: Settings, requiredPermission: 'manage_app_settings' },
     { label: 'إدارة المستخدمين', href: '/settings/users', icon: UserCog, requiredPermission: 'manage_system_users' },
@@ -272,6 +272,7 @@ export interface Review {
   orderId?: string; // From DB: order_id
   menuItemName?: string; // From DB: menu_item_name
   is_public?: boolean; // From DB: is_public
+  avatarFallback?: string; // Added for UI
 }
 
 
@@ -304,15 +305,13 @@ export interface Role {
   permissions: string[]; // Array of permission names/IDs
 }
 
-export interface Permission { // Added for clarity, matches structure in users page
+export interface Permission {
   id: string;
   name: string;
   group_name?: string;
   description?: string;
 }
 
-// This list should ideally match the 'name' column in your 'permissions' SQL table.
-// Used in UserManagementPage for displaying all available permissions.
 export const DUMMY_PERMISSIONS_LIST: string[] = [
   'view_dashboard', 'manage_pos', 'manage_menu', 'view_kitchen_screen', 'manage_tables',
   'manage_inventory_view', 'manage_inventory_edit', 'manage_employees_view', 'manage_employees_edit',
@@ -322,20 +321,18 @@ export const DUMMY_PERMISSIONS_LIST: string[] = [
   'manage_app_settings', 'manage_system_users'
 ];
 
-
-// DUMMY DATA - Should be phased out as DB integration completes
-// ... (Keep other DUMMY_DATA arrays if still used by parts of the app not yet fully DB-integrated)
-export const DUMMY_CUSTOMERS: Customer[] = []; // Assume these are fetched from DB
-export const DUMMY_ORDERS: Order[] = []; // Assume these are fetched from DB
-export const DUMMY_MENU_ITEMS: MenuItem[] = []; // Assume these are fetched from DB
-export const DUMMY_TABLES: Table[] = []; // Assume these are fetched from DB
-export const DUMMY_EMPLOYEES: Employee[] = []; // Assume these are fetched from DB
-export const DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = []; // Assume these are fetched from DB
-export const DUMMY_REVIEWS: Review[] = []; // Assume these are fetched from DB
-export const DUMMY_INGREDIENTS: Ingredient[] = []; // Assume these are fetched from DB
-export const DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = []; // Assume these are fetched from DB
-export const DUMMY_SUPPLIERS: Supplier[] = []; // Assume these are fetched from DB
-export const DUMMY_SYSTEM_USERS: SystemUser[] = []; // Assume these are fetched from DB
-export const DUMMY_ROLES: Role[] = []; // Assume these are fetched from DB
+// DUMMY DATA - Kept for reference during development if DB connection fails or for initial setup.
+// Should be phased out or used only for initial seeding if absolutely necessary.
+export const DUMMY_CUSTOMERS: Customer[] = [];
+export const DUMMY_ORDERS: Order[] = [];
+export const DUMMY_MENU_ITEMS: MenuItem[] = [];
+export const DUMMY_TABLES: Table[] = [];
+export const DUMMY_EMPLOYEES: Employee[] = [];
+export const DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = [];
+export const DUMMY_REVIEWS: Review[] = [];
+export const DUMMY_INGREDIENTS: Ingredient[] = [];
+export const DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = [];
+export const DUMMY_SUPPLIERS: Supplier[] = [];
+export const DUMMY_SYSTEM_USERS: SystemUser[] = [];
+export const DUMMY_ROLES: Role[] = [];
 // End DUMMY DATA
-```

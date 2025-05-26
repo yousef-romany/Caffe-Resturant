@@ -16,7 +16,6 @@ import {
   SidebarTrigger,
   SidebarSeparator,
   SidebarMenuButton,
-  // Removed useSidebar from here as AppLayout provides it.
 } from "@/components/ui/sidebar";
 import {
   Accordion,
@@ -56,54 +55,42 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const checkPagePermission = useCallback((currentPath: string, permissions: string[]): boolean => {
     let requiredPermission: string | undefined = undefined;
+    let matchedItem: NavItem | null = null;
 
-    const findPermissionRecursive = (items: NavItem[], path: string): boolean => {
+    const findItemRecursive = (items: NavItem[], path: string): NavItem | null => {
       for (const item of items) {
-        // Check if the current item's href matches the path directly
-        if (item.href === path) {
-          requiredPermission = item.requiredPermission;
-          return true; // Found a direct match
-        }
-        // If the item is an accordion (has children) and its href is a prefix of the path,
-        // check its children. This handles cases where a section like /inventory has sub-pages.
-        if (item.children && path.startsWith(item.href)) {
-          if (findPermissionRecursive(item.children, path)) {
-            // If a child matched, the requiredPermission is already set by the child.
-            // If no child matched, but the parent itself has a permission, use that.
-             if (requiredPermission === undefined && item.requiredPermission) {
-                requiredPermission = item.requiredPermission;
-             }
-            return true;
+        if (item.href === path || (item.href !== "/" && path.startsWith(item.href) && item.children && item.children.length > 0)) {
+          // If it's a direct match or a prefix match for a parent with children
+          if (item.children && item.children.length > 0) {
+            // If it's a parent, check if any child matches more specifically
+            const deeperMatch = findItemRecursive(item.children, path);
+            if (deeperMatch) return deeperMatch; // Prefer deeper match
           }
+          return item; // Return current item if no deeper match or no children
         }
       }
-      return false; // No match in this branch
+      return null;
     };
     
-    // Check main navigation items
-    if (findPermissionRecursive(NAV_ITEMS, currentPath)) {
-      // requiredPermission is now set if a match was found
-    } 
-    // If not found in main nav, check settings nav item and its children
-    else if (SETTINGS_NAV_ITEM.href === currentPath) {
-        requiredPermission = SETTINGS_NAV_ITEM.requiredPermission;
-    } else if (SETTINGS_NAV_ITEM.children && currentPath.startsWith(SETTINGS_NAV_ITEM.href)) {
-        if (findPermissionRecursive(SETTINGS_NAV_ITEM.children, currentPath)) {
-            // requiredPermission is set by child
-        } else if (SETTINGS_NAV_ITEM.requiredPermission) {
-            // No child matched, but parent has permission
-            requiredPermission = SETTINGS_NAV_ITEM.requiredPermission;
+    matchedItem = findItemRecursive(NAV_ITEMS, currentPath);
+    if (!matchedItem && SETTINGS_NAV_ITEM) {
+        if (SETTINGS_NAV_ITEM.href === currentPath || (SETTINGS_NAV_ITEM.href !== "/" && currentPath.startsWith(SETTINGS_NAV_ITEM.href) && SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0)) {
+            if (SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0) {
+                const settingsChildMatch = findItemRecursive(SETTINGS_NAV_ITEM.children, currentPath);
+                if (settingsChildMatch) matchedItem = settingsChildMatch;
+                else matchedItem = SETTINGS_NAV_ITEM;
+            } else {
+                 matchedItem = SETTINGS_NAV_ITEM;
+            }
         }
     }
-
+    
+    requiredPermission = matchedItem?.requiredPermission;
 
     if (requiredPermission === undefined) {
-      // If no specific permission is defined for the path after checking all NavItems,
-      // and the path is not the general dashboard (which is now always allowed),
-      // it might be an unknown path or a path that should be public within the app layout.
-      // For safety, if not /dashboard, and no permission found, deny.
-      // /dashboard is handled by not having a requiredPermission in NAV_ITEMS.
-      return currentPath === '/dashboard'; // Only allow dashboard if no perm is found
+      // If no specific permission is set for the matched item (or no item matched but it's a known path like dashboard), allow access for logged-in users.
+      // The dashboard (href: '/dashboard') has its requiredPermission removed, so it will fall here.
+      return true; 
     }
     return permissions.includes(requiredPermission);
   }, []);
@@ -112,75 +99,94 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const sessionString = localStorage.getItem('userSession');
     let currentPermissions: string[] = [];
+    let sessionData: UserSession | null = null;
+
     if (sessionString) {
       try {
-        const sessionData: UserSession = JSON.parse(sessionString);
-        currentPermissions = sessionData.permissionNames || [];
+        sessionData = JSON.parse(sessionString);
+        currentPermissions = sessionData?.permissionNames || [];
         setUserPermissions(currentPermissions);
       } catch (e) {
         console.error("Failed to parse user session from localStorage", e);
         setUserPermissions([]);
       }
-    } else {
-      // No session, redirect to login unless it's the login page itself
-      if (pathname !== '/') { // Assuming '/' is the login page
-         router.replace('/');
-         return; // Stop further processing if redirecting
-      }
     }
-    setIsSessionLoaded(true);
+    setIsSessionLoaded(true); // Session loading attempt is complete
 
+    // If no session, redirect to login, unless already on login page
+    if (!sessionData && pathname !== '/') {
+      router.replace('/');
+      return; 
+    }
+    
+    // If session exists, then check page permission
+    if (sessionData) {
+        if (!checkPagePermission(pathname, currentPermissions)) {
+          console.warn(`Access denied to ${pathname} for user with permissions: [${currentPermissions.join(', ')}]. Redirecting to dashboard.`);
+          router.replace('/dashboard'); 
+        }
+    }
+    setIsAccessChecked(true); // Access check is complete
+
+
+    // Handle kitchen slug for sidebar navigation highlighting
     const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
     if (pathname === '/kitchen-display' && storedSlug) {
       setActiveKitchenSlugForNav(storedSlug);
-    } else if (pathname !== '/kitchen-display') {
+    } else if (pathname.startsWith('/kitchen-display') && !storedSlug) {
+      // If on kitchen-display but no slug in local storage, try to infer from constants if needed, or set to default
+      // This part might need more specific logic if direct navigation to /kitchen-display (no slug) is possible and should pick a default
+    }
+    else if (pathname !== '/kitchen-display') {
       setActiveKitchenSlugForNav(null);
     }
     
-    // Only check page permission if session is loaded
-    if (sessionString) { // Check if user is logged in
-      if (!checkPagePermission(pathname, currentPermissions)) {
-        console.warn(`Access denied to ${pathname}. User may lack required permission.`);
-        router.replace('/dashboard'); // Redirect to dashboard if access to current page is denied
-      }
-    }
-    setIsAccessChecked(true);
+    const handleStorageChange = () => {
+        const updatedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
+        if (pathname === '/kitchen-display' && updatedSlug !== activeKitchenSlugForNav) {
+            setActiveKitchenSlugForNav(updatedSlug);
+        }
+    };
 
-  }, [pathname, router, checkPagePermission]);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+        window.removeEventListener('storage', handleStorageChange);
+    };
+
+  }, [pathname, router, checkPagePermission, activeKitchenSlugForNav]);
 
 
   const canView = useCallback((item: NavItem): boolean => {
     if (!item.requiredPermission) {
-      return true; // Item is public or accessible to all authenticated users
+      return true; // Items without a requiredPermission are visible to all logged-in users
     }
     return userPermissions.includes(item.requiredPermission);
   }, [userPermissions]);
 
   const renderNavItems = useCallback((items: NavItem[], isSubMenu = false, parentHref?: string) => {
     return items
-      .filter(canView) // Filter items based on permissions first
+      .filter(canView) 
       .map((item) => {
         const visibleChildren = item.children?.filter(canView) || [];
         
         if (item.children && item.children.length > 0) {
-          if (visibleChildren.length === 0 && !item.requiredPermission) return null; // Hide accordion if no visible children and parent has no specific perm
-          if (visibleChildren.length === 0 && item.requiredPermission && !canView(item)) return null; // Hide if parent itself isn't viewable
+          if (visibleChildren.length === 0 && !item.requiredPermission && !isSubMenu) return null; 
+          if (visibleChildren.length === 0 && item.requiredPermission && !canView(item)) return null; 
 
-          const isChildActive = visibleChildren.some(child => {
+          let isChildActive = visibleChildren.some(child => {
             if (parentHref === '/kitchen-display' && child.slug) {
               return activeKitchenSlugForNav === child.slug && pathname === '/kitchen-display';
             }
-            return pathname.startsWith(child.href);
+            return child.href !== "/" && pathname.startsWith(child.href);
           });
           
           let isActiveGroup = 
-            (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)) || 
+            (item.href === "/" && pathname === "/") || (item.href !== "/" && pathname.startsWith(item.href)) || 
             isChildActive;
 
-          if (item.href === '/kitchen-display' && pathname !== '/kitchen-display') {
-              isActiveGroup = false; 
-          } else if (item.href === '/kitchen-display' && pathname === '/kitchen-display') {
-               isActiveGroup = isChildActive || (activeKitchenSlugForNav && item.children?.some(c => c.slug === activeKitchenSlugForNav));
+          // Special handling for kitchen-display parent
+          if (item.href === '/kitchen-display') {
+             isActiveGroup = pathname.startsWith('/kitchen-display') && (isChildActive || (activeKitchenSlugForNav && item.children?.some(c => c.slug === activeKitchenSlugForNav)));
           }
           
           return (
@@ -211,7 +217,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           );
         }
 
-        // Handle kitchen display direct children
+        // Handling for kitchen category items
         if (parentHref === '/kitchen-display' && item.slug) {
           const currentItemSlug = item.slug;
           return (
@@ -224,17 +230,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 onClick={() => {
                   if (currentItemSlug) {
                     localStorage.setItem('selectedKitchenCategorySlug', currentItemSlug);
-                    setActiveKitchenSlugForNav(currentItemSlug);
-                    // Only push if not already on /kitchen-display, or refresh to trigger useEffect in KitchenDisplayPage
+                    setActiveKitchenSlugForNav(currentItemSlug); // Update state for immediate UI feedback
                     if (pathname !== '/kitchen-display') {
                       router.push('/kitchen-display');
                     } else {
-                      router.refresh(); // Or a more targeted state update to trigger data fetch
+                       // Force re-render if already on the page.
+                       // Dispatching a storage event can sometimes work if the page listens to it.
+                       window.dispatchEvent(new Event('storage')); 
+                       router.refresh(); // A more direct way to ask Next.js to refresh data
                     }
                   }
                 }}
               >
-                <a>
+                <a> {/* Anchor tag is required when asChild is true for routing */}
                   <item.icon className="h-5 w-5" />
                   <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
                 </a>
@@ -243,28 +251,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
           );
         }
 
-        // Standard NavLink for other items
+        // Regular NavLink for other items
         return (
           <SidebarMenuItem key={item.href} dir="rtl">
             <NavLink href={item.href} icon={item.icon} label={item.label} />
           </SidebarMenuItem>
         );
     });
-  }, [canView, pathname, activeKitchenSlugForNav, router]);
+  }, [canView, pathname, activeKitchenSlugForNav, router]); // Added router to dependencies for kitchen slug navigation
 
 
   if (!isSessionLoaded || !isAccessChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p>جارٍ تحميل الجلسة والتحقق من الصلاحيات...</p>
-        {/* Or a more sophisticated skeleton loader */}
       </div>
     );
   }
   
-  // If no user session, redirect to login page (already handled in useEffect, but as a fallback)
+  // This check should ideally be handled by the useEffect redirecting,
+  // but as a fallback, if somehow rendering happens before redirect.
   if (!localStorage.getItem('userSession') && pathname !== '/') {
-     // This should ideally not be reached if useEffect handles redirection correctly
+     // This might cause a flash if redirection from useEffect is slightly delayed.
+     // The useEffect should be the primary gatekeeper.
      return <div className="flex min-h-screen items-center justify-center"><p>إعادة توجيه لتسجيل الدخول...</p></div>;
   }
 
@@ -273,7 +282,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider defaultOpen>
       <Sidebar
         collapsible="icon"
-        side="right" // Ensures sidebar is on the right for RTL
+        side="right" 
         className="border-l border-r-0 border-sidebar-border shadow-sm"
       >
         <SidebarHeader className="p-4">
@@ -316,7 +325,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </AccordionContent>
                   </AccordionItem>
               </Accordion>
-            ) : canView(SETTINGS_NAV_ITEM) ? ( // If settings item itself is a direct link and viewable
+            ) : canView(SETTINGS_NAV_ITEM) ? ( 
                <SidebarMenuItem>
                   <NavLink
                     href={SETTINGS_NAV_ITEM.href}
@@ -344,4 +353,3 @@ export default function AppLayout({ children }: AppLayoutProps) {
     </SidebarProvider>
   );
 }
-```
