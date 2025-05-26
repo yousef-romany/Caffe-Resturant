@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getDb } from '@/lib/db';
+import type { Database } from '@tauri-apps/plugin-sql';
+
 
 const initialNewUserState: Omit<SystemUser, 'id' | 'hashedPassword'> & { password?: string } = {
   username: '',
@@ -36,11 +38,11 @@ const initialNewRoleState: Omit<AppRole, 'id'> = {
 
 
 export default function UserManagementPage() {
-  const [db, setDbInstance] = useState<any>(null);
+  const [db, setDbInstance] = useState<Database | null>(null);
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [allPermissions, setAllPermissions] = useState<string[]>(DUMMY_PERMISSIONS_LIST); // Placeholder, should be fetched from DB
+  const [allPermissions, setAllPermissions] = useState<string[]>(DUMMY_PERMISSIONS_LIST);
   const { toast } = useToast();
 
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
@@ -74,28 +76,27 @@ export default function UserManagementPage() {
     loadDbAndData();
   }, [toast]);
 
-  const fetchAllData = async (currentDb: any) => {
+  const fetchAllData = async (currentDb: Database) => {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      const usersData = await currentDb.select<SystemUser[]>('SELECT id, username, full_name, employee_id, is_active FROM system_users ORDER BY username');
-      // For roles, we need to fetch roles and their permissions separately and combine them.
-      const rolesData = await currentDb.select<AppRole[]>('SELECT id, name, description FROM roles ORDER BY name');
+      const usersData: SystemUser[] = await currentDb.select('SELECT id, username, full_name, employee_id, is_active FROM system_users ORDER BY username');
+      
+      const rolesData: AppRole[] = await currentDb.select('SELECT id, name, description FROM roles ORDER BY name');
       const rolesWithPermissions = await Promise.all(rolesData.map(async (role: AppRole) => {
-        const permissionsRaw = await currentDb.select<{permission_id: string}[]>("SELECT permission_id FROM role_permissions WHERE role_id = ?", [role.id]);
+        const permissionsRaw: {permission_id: string}[] = await currentDb.select("SELECT permission_id FROM role_permissions WHERE role_id = ?", [role.id]);
         return { ...role, permissions: permissionsRaw.map(p => p.permission_id) };
       }));
       
       const userRolesPromises = usersData.map(async (user: SystemUser) => {
-        const userRolesRaw = await currentDb.select<{role_id: string}[]>('SELECT role_id FROM user_roles WHERE user_id = ?', [user.id]);
-        return { ...user, roles: userRolesRaw.map(ur => ur.role_id) };
+        const userRolesRaw: {role_id: string}[] = await currentDb.select('SELECT role_id FROM user_roles WHERE user_id = ?', [user.id]);
+        return { ...user, roles: userRolesRaw.map(ur => ur.role_id), isActive: Boolean(user.isActive) };
       });
       const usersWithRoles = await Promise.all(userRolesPromises);
 
-      const employeesData = await currentDb.select<Employee[]>('SELECT id, name, role FROM employees WHERE is_active = true ORDER BY name'); // Assuming employees table exists
+      const employeesData: Employee[] = await currentDb.select('SELECT id, name, role FROM employees WHERE is_active = true ORDER BY name'); 
       
-      // Fetch permissions from DB (assuming permissions table is populated)
-      const permissionsFromDb = await currentDb.select<{name: string}[]>('SELECT name FROM permissions ORDER BY name');
+      const permissionsFromDb: {name: string}[] = await currentDb.select('SELECT name FROM permissions ORDER BY name');
       setAllPermissions(permissionsFromDb.map(p => p.name));
 
       setSystemUsers(usersWithRoles);
@@ -116,7 +117,6 @@ export default function UserManagementPage() {
     return role ? role.name : roleId;
   }
 
-  // User Dialog Functions
   const handleUserInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setNewUserData(prev => ({ ...prev, [name]: value }));
@@ -138,7 +138,7 @@ export default function UserManagementPage() {
   const handleUserActiveChangeSwitch = async (userId: string, isActive: boolean) => {
     if (!db) return;
     try {
-      await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [isActive, userId]);
+      await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, userId]);
       setSystemUsers(prevUsers =>
         prevUsers.map(u =>
         u.id === userId ? { ...u, isActive: isActive } : u
@@ -167,9 +167,9 @@ export default function UserManagementPage() {
       username: user.username,
       fullName: user.fullName,
       employeeId: user.employeeId,
-      roles: user.roles || [], // Ensure roles is an array
+      roles: user.roles || [], 
       isActive: user.isActive,
-      password: '', // Don't prefill password
+      password: '', 
     });
     setIsUserDialogOpen(true);
   };
@@ -187,32 +187,27 @@ export default function UserManagementPage() {
 
     try {
       if (editingUser) {
-        // Update existing user
-        const updateFields: any[] = [newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.isActive];
+        const updateFields: any[] = [newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.isActive ? 1 : 0];
         let sql = 'UPDATE system_users SET username = ?, full_name = ?, employee_id = ?, is_active = ?';
         if (newUserData.password) {
-          // IMPORTANT: HASH THE PASSWORD IN A REAL APP BEFORE SAVING!
           sql += ', hashed_password = ?';
-          updateFields.push(newUserData.password); // Plain text for now, hash in real app
+          updateFields.push(newUserData.password); 
         }
         sql += ' WHERE id = ?';
         updateFields.push(editingUser.id);
         
         await db.execute(sql, updateFields);
         
-        // Update user roles (delete old, insert new)
         await db.execute('DELETE FROM user_roles WHERE user_id = ?', [editingUser.id]);
         for (const roleId of newUserData.roles) {
           await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [editingUser.id, roleId]);
         }
         toast({ title: "نجاح", description: `تم تحديث المستخدم ${newUserData.username}.` });
       } else {
-        // Add new user
         const newUserId = `user-${Date.now()}`;
-        // IMPORTANT: HASH THE PASSWORD IN A REAL APP BEFORE SAVING!
         await db.execute(
           'INSERT INTO system_users (id, username, full_name, employee_id, hashed_password, is_active) VALUES (?, ?, ?, ?, ?, ?)',
-          [newUserId, newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.password, newUserData.isActive] // Plain text password
+          [newUserId, newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.password, newUserData.isActive ? 1 : 0]
         );
         for (const roleId of newUserData.roles) {
           await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleId]);
@@ -220,21 +215,19 @@ export default function UserManagementPage() {
         toast({ title: "نجاح", description: `تمت إضافة المستخدم ${newUserData.username}.` });
       }
       setIsUserDialogOpen(false);
-      await fetchAllData(db); // Re-fetch data
+      if (db) await fetchAllData(db);
     } catch (error) {
       console.error("Error submitting user:", error);
-      toast({ title: "خطأ", description: "فشل حفظ بيانات المستخدم.", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل حفظ بيانات المستخدم. قد يكون اسم المستخدم مكرر.", variant: "destructive" });
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (!db) return;
-    // Add confirmation dialog in real app
     try {
       await db.execute('DELETE FROM system_users WHERE id = ?', [userId]);
-      // user_roles will be cascade deleted if FK is set up with ON DELETE CASCADE
       toast({ title: "نجاح", description: `تم حذف المستخدم.`, variant: "destructive" });
-      await fetchAllData(db); // Re-fetch data
+      if (db) await fetchAllData(db);
     } catch (error) {
       console.error("Error deleting user:", error);
       toast({ title: "خطأ", description: "فشل حذف المستخدم.", variant: "destructive" });
@@ -242,7 +235,6 @@ export default function UserManagementPage() {
   };
 
 
-  // Role Dialog Functions
   const handleRoleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setNewRoleData(prev => ({ ...prev, [name]: value }));
@@ -268,7 +260,7 @@ export default function UserManagementPage() {
     setNewRoleData({
       name: role.name,
       description: role.description,
-      permissions: role.permissions || [] // Ensure permissions is an array
+      permissions: role.permissions || [] 
     });
     setIsRoleDialogOpen(true);
   };
@@ -288,8 +280,6 @@ export default function UserManagementPage() {
         );
         await db.execute('DELETE FROM role_permissions WHERE role_id = ?', [editingRole.id]);
         for (const permissionName of newRoleData.permissions) {
-          // Assuming permissionName is the unique name from 'permissions' table
-          // This part might need adjustment if permission IDs are used instead of names
           await db.execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, (SELECT id FROM permissions WHERE name = ?))', 
             [editingRole.id, permissionName]);
         }
@@ -307,17 +297,17 @@ export default function UserManagementPage() {
         toast({ title: "نجاح", description: `تمت إضافة الدور ${newRoleData.name}.` });
       }
       setIsRoleDialogOpen(false);
-      await fetchAllData(db); // Re-fetch data
+      if (db) await fetchAllData(db);
     } catch (error) {
       console.error("Error submitting role:", error);
-      toast({ title: "خطأ", description: "فشل حفظ بيانات الدور.", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل حفظ بيانات الدور. قد يكون اسم الدور مكرر.", variant: "destructive" });
     }
   };
   
   const handleDeleteRole = async (roleId: string) => {
     if (!db) return;
     try {
-      const usersWithRole = await db.select('SELECT COUNT(*) as count FROM user_roles WHERE role_id = ?', [roleId]);
+      const usersWithRole: {count: number}[] = await db.select('SELECT COUNT(*) as count FROM user_roles WHERE role_id = ?', [roleId]);
       if (usersWithRole[0].count > 0) {
         toast({
           title: "خطأ عند الحذف",
@@ -327,16 +317,15 @@ export default function UserManagementPage() {
         return;
       }
       await db.execute('DELETE FROM roles WHERE id = ?', [roleId]);
-      // role_permissions will be cascade deleted if FK is set up with ON DELETE CASCADE
       toast({ title: "نجاح", description: `تم حذف الدور.`, variant: "destructive" });
-      await fetchAllData(db); // Re-fetch data
+      if (db) await fetchAllData(db);
     } catch (error) {
       console.error("Error deleting role:", error);
       toast({ title: "خطأ", description: "فشل حذف الدور.", variant: "destructive" });
     }
   };
 
-  if (isLoading && !db) { // Show loading only if DB is not even tried to init
+  if (isLoading && !db) { 
     return (
       <>
         <PageHeader title="إدارة المستخدمين والصلاحيات" icon={UserCog}/>
@@ -344,7 +333,7 @@ export default function UserManagementPage() {
       </>
     )
   }
-  if (isLoading) { // Show loading for data fetching
+  if (isLoading) { 
     return (
       <>
         <PageHeader title="إدارة المستخدمين والصلاحيات" icon={UserCog}/>
@@ -593,3 +582,7 @@ export default function UserManagementPage() {
     </>
   );
 }
+
+    
+
+    

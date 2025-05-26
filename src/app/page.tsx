@@ -11,7 +11,7 @@ import { LogIn, AlertTriangle } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
-import type { SystemUser, Role } from '@/constants'; // Assuming these types are defined
+import type { SystemUser, Role } from '@/constants'; 
 
 interface UserSessionData {
   userId: string;
@@ -54,10 +54,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Simulate login: Check if username exists and is active
-      // IMPORTANT: In a real app, you MUST hash and verify passwords securely.
-      // This is a placeholder and highly insecure for password handling.
-      const users: SystemUser[] = await db.select("SELECT id, username, full_name, is_active FROM system_users WHERE username = $1", [username]);
+      const users: SystemUser[] = await db.select("SELECT id, username, full_name, is_active FROM system_users WHERE username = ?", [username]);
 
       if (users.length === 0) {
         setError("اسم المستخدم أو كلمة المرور غير صحيحة.");
@@ -74,33 +71,27 @@ export default function LoginPage() {
         return;
       }
 
-      // Fetch user roles
-      const userRolesRaw: { role_id: string }[] = await db.select("SELECT role_id FROM user_roles WHERE user_id = $1", [user.id]);
+      const userRolesRaw: { role_id: string }[] = await db.select("SELECT role_id FROM user_roles WHERE user_id = ?", [user.id]);
       const roleIds = userRolesRaw.map(ur => ur.role_id);
       
       let roleNames: string[] = [];
       if (roleIds.length > 0) {
-        // Constructing a dynamic IN clause is tricky with some SQL drivers' parameterization.
-        // For simplicity with tauri-plugin-sql, we'll fetch all roles and filter, or do multiple queries if needed.
-        // A more optimized way might be SELECT name FROM roles WHERE id IN (?, ?, ...)
-        // For now, let's fetch names for these specific roles.
-        const rolesData: Role[] = await db.select(`SELECT id, name FROM roles WHERE id IN (${roleIds.map(id => `'${id}'`).join(',')})`);
+        const rolesData: Role[] = await db.select(`SELECT id, name FROM roles WHERE id IN (${roleIds.map(() => '?').join(',')})`, roleIds);
         roleNames = rolesData.map(r => r.name);
       }
 
-      // Fetch permissions for these roles
       let permissionNames: string[] = [];
       if (roleIds.length > 0) {
         const permissionsRaw: { name: string }[] = await db.select(
           `SELECT DISTINCT p.name 
            FROM permissions p 
            JOIN role_permissions rp ON p.id = rp.permission_id 
-           WHERE rp.role_id IN (${roleIds.map(id => `'${id}'`).join(',')})`
+           WHERE rp.role_id IN (${roleIds.map(() => '?').join(',')})`,
+          roleIds
         );
         permissionNames = permissionsRaw.map(p => p.name);
       }
       
-      // Store user session info (simplified)
       const sessionData: UserSessionData = {
         userId: user.id,
         username: user.username,
@@ -171,10 +162,6 @@ export default function LoginPage() {
             <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
               {isLoading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
             </Button>
-            {/* Placeholder for forgot password or other links if needed later */}
-            {/* <p className="text-sm text-muted-foreground text-center">
-              <Link href="#" className="text-primary hover:underline">هل نسيت كلمة المرور؟</Link>
-            </p> */}
           </CardFooter>
         </form>
       </Card>
@@ -186,3 +173,5 @@ export default function LoginPage() {
     </main>
   );
 }
+
+    

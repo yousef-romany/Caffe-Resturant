@@ -1,5 +1,5 @@
 
-"use client"; // Required for useState, useEffect, etc.
+"use client"; 
 
 import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 
-// Define setting keys as constants for consistency
 const SETTING_KEYS = {
   STORE_NAME: 'STORE_NAME',
   STORE_ADDRESS: 'STORE_ADDRESS',
@@ -32,12 +31,10 @@ export default function SettingsPage() {
   const [db, setDbInstance] = useState<Database | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Store Information State
   const [storeName, setStoreName] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storeContactPhone, setStoreContactPhone] = useState('');
 
-  // Tax and Discount State
   const [isVatEnabled, setIsVatEnabled] = useState(false);
   const [vatPercentage, setVatPercentage] = useState(0);
   const [isGlobalDiscountEnabled, setIsGlobalDiscountEnabled] = useState(false);
@@ -62,7 +59,7 @@ export default function SettingsPage() {
       }
     }
     initializeDbAndLoadSettings();
-  }, [toast]); // toast is stable
+  }, [toast]); 
 
   const loadAllSettings = async (currentDb: Database) => {
     try {
@@ -74,13 +71,12 @@ export default function SettingsPage() {
       setStoreContactPhone(settingsMap.get(SETTING_KEYS.STORE_CONTACT_PHONE) || '+1 (555) 123-4567');
 
       setIsVatEnabled(settingsMap.get(SETTING_KEYS.IS_VAT_ENABLED) === 'true');
-      setVatPercentage(parseFloat(settingsMap.get(SETTING_KEYS.VAT_PERCENTAGE) || '14')); // Default 14 if not set
+      setVatPercentage(parseFloat(settingsMap.get(SETTING_KEYS.VAT_PERCENTAGE) || '14')); 
       setIsGlobalDiscountEnabled(settingsMap.get(SETTING_KEYS.IS_GLOBAL_DISCOUNT_ENABLED) === 'true');
       setGlobalDiscountPercentage(parseFloat(settingsMap.get(SETTING_KEYS.GLOBAL_DISCOUNT_PERCENTAGE) || '0'));
     } catch (error) {
       console.error("Error loading settings:", error);
       toast({ title: "خطأ", description: "فشل تحميل الإعدادات من قاعدة البيانات.", variant: "destructive" });
-      // Set defaults on error
       setStoreName('كافيه بوس إكسبريس');
       setStoreAddress('123 الشارع الرئيسي, أي مدينة');
       setStoreContactPhone('+1 (555) 123-4567');
@@ -98,13 +94,13 @@ export default function SettingsPage() {
     }
     try {
       const updateResult: any = await db.execute(
-        "UPDATE app_settings SET setting_value = $1, updated_at = CURRENT_TIMESTAMP WHERE setting_key = $2",
+        "UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?",
         [value, key]
       );
 
       if (updateResult.rowsAffected === 0) {
         await db.execute(
-          "INSERT INTO app_settings (setting_key, setting_value, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+          "INSERT INTO app_settings (setting_key, setting_value, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
           [key, value]
         );
       }
@@ -141,10 +137,10 @@ export default function SettingsPage() {
     setIsLoading(false);
   };
 
-  if (isLoading && !db) { // Initial loading for DB connection
+  if (isLoading && !db) { 
     return <PageHeader title="الإعدادات" description="جارٍ الاتصال بقاعدة البيانات..." />;
   }
-  if (isLoading) { // Loading for settings data
+  if (isLoading) { 
      return <PageHeader title="الإعدادات" description="جارٍ تحميل الإعدادات..." />;
   }
 

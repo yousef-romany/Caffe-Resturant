@@ -73,8 +73,6 @@ export default function IngredientsPage() {
       } catch (error) {
         console.error("Failed to initialize DB or fetch data:", error);
         toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات المكونات أو الموردين.", variant: "destructive" });
-      } finally {
-        // setIsLoading and setIsLoadingSuppliers are handled within their respective fetch functions
       }
     }
     loadDbAndFetchData();
@@ -153,14 +151,14 @@ export default function IngredientsPage() {
     try {
       if (editingIngredient) {
         await db.execute(
-          'UPDATE ingredients SET name = $1, unit = $2, stock_quantity = $3, cost_per_unit = $4, low_stock_threshold = $5, supplier_id = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+          'UPDATE ingredients SET name = ?, unit = ?, stock_quantity = ?, cost_per_unit = ?, low_stock_threshold = ?, supplier_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [ingredientDataToSave.name, ingredientDataToSave.unit, ingredientDataToSave.stock_quantity, ingredientDataToSave.cost_per_unit, ingredientDataToSave.low_stock_threshold, ingredientDataToSave.supplier_id, editingIngredient.id]
         );
         toast({ title: "نجاح", description: `تم تحديث المكون ${ingredientDataToSave.name}.` });
       } else {
         const newIngredientId = `ing-${Date.now()}`;
         await db.execute(
-          'INSERT INTO ingredients (id, name, unit, stock_quantity, cost_per_unit, low_stock_threshold, supplier_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          'INSERT INTO ingredients (id, name, unit, stock_quantity, cost_per_unit, low_stock_threshold, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [newIngredientId, ingredientDataToSave.name, ingredientDataToSave.unit, ingredientDataToSave.stock_quantity, ingredientDataToSave.cost_per_unit, ingredientDataToSave.low_stock_threshold, ingredientDataToSave.supplier_id]
         );
         toast({ title: "نجاح", description: `تمت إضافة المكون ${ingredientDataToSave.name}.` });
@@ -168,10 +166,10 @@ export default function IngredientsPage() {
       setIsDialogOpen(false);
       setEditingIngredient(null);
       setNewIngredientData(initialNewIngredientState);
-      await fetchIngredients(db);
+      if (db) await fetchIngredients(db);
     } catch (error) {
       console.error("Error submitting ingredient:", error);
-      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات المكون.", variant: "destructive" });
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات المكون. قد يكون اسم المكون مكرر.", variant: "destructive" });
     }
   };
 
@@ -194,9 +192,9 @@ export default function IngredientsPage() {
       return;
     }
     try {
-      await db.execute('DELETE FROM ingredients WHERE id = $1', [ingredientToDelete.id]);
+      await db.execute('DELETE FROM ingredients WHERE id = ?', [ingredientToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف المكون ${ingredientToDelete.name}.`, variant: "destructive" });
-      await fetchIngredients(db);
+      if (db) await fetchIngredients(db);
     } catch (error: any) {
       console.error("Error deleting ingredient:", error);
       if (error.message && (error.message.toLowerCase().includes("constraint failed") || error.message.toLowerCase().includes("foreign key constraint fails"))) {
@@ -345,6 +343,5 @@ export default function IngredientsPage() {
     </>
   );
 }
-    
 
     

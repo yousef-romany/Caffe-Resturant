@@ -1,5 +1,5 @@
 
-"use client"; // Required for useEffect and useState
+"use client"; 
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -7,19 +7,16 @@ import { Button } from '@/components/ui/button';
 import NextImage from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Utensils, Coffee, Cake, ScanLine, Leaf, Sofa, Zap, Smartphone, Star, MessageSquare } from 'lucide-react';
-import type { MenuItem, Review } from '@/constants'; // Assuming Review interface is defined
+import type { MenuItem, Review } from '@/constants'; 
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 import { useToast } from '@/hooks/use-toast';
 
-// Simplified interfaces for this page, ensure they match your actual DB structure/constants
 interface FetchedMenuItem extends MenuItem {
-  // Ensure all properties from MenuItem are here if needed
+  icon?: LucideIcon; 
 }
 
 interface FetchedReview extends Review {
-  // Ensure all properties from Review are here
-  // Add avatarFallback if you derive it dynamically or store it
   avatarFallback?: string; 
 }
 
@@ -44,25 +41,22 @@ export default function WebsiteLandingPage() {
           return;
         }
 
-        // Fetch Featured Items (e.g., first 3 available items)
         const menuItemsData: any[] = await dbInstance.select(
           "SELECT id, name, category, price, image_url as imageUrl, description, data_ai_hint as dataAiHint, is_available FROM menu_items WHERE is_available = TRUE ORDER BY created_at DESC LIMIT 3"
         );
         setFeaturedItems(menuItemsData.map(item => ({
             ...item, 
             price: Number(item.price),
-            icon: item.category === 'مأكولات' ? Utensils : item.category === 'مشروبات' ? Coffee : Cake // Simplified icon logic
+            icon: item.category === 'مأكولات' ? Utensils : item.category === 'مشروبات' ? Coffee : Cake 
         })));
 
-        // Fetch Testimonials (e.g., first 3 public reviews)
         const reviewsData: any[] = await dbInstance.select(
           "SELECT id, customer_name as customerName, rating, comment, review_date as reviewDate FROM reviews WHERE is_public = TRUE ORDER BY review_date DESC LIMIT 3"
         );
         setTestimonials(reviewsData.map(review => ({
             ...review,
             rating: Number(review.rating),
-            reviewDate: new Date(review.reviewDate), // Ensure date is parsed
-            // Create a simple avatar fallback from the customer name
+            reviewDate: new Date(review.reviewDate), 
             avatarFallback: review.customerName ? review.customerName.substring(0, 2).toUpperCase() : '??'
         })));
 
@@ -74,7 +68,7 @@ export default function WebsiteLandingPage() {
       }
     }
     initializeAndLoadData();
-  }, [toast]); // db instance is not added to dependency to avoid re-fetch on every db re-init if that happens.
+  }, [toast]); 
 
   const whyChooseUsItems = [
     { icon: Leaf, title: "مكونات طازجة", description: "نستخدم أجود المكونات الطازجة يوميًا لضمان أفضل مذاق." },
@@ -94,7 +88,6 @@ export default function WebsiteLandingPage() {
 
   return (
     <>
-      {/* Hero Section */}
       <section className="relative pt-20 pb-24 md:pt-32 md:pb-36 bg-gradient-to-br from-primary/10 via-background to-accent/5 text-center overflow-hidden">
         <div className="absolute inset-0 bg-background/50 backdrop-blur-sm"></div>
         <div className="container relative z-10 mx-auto px-4">
@@ -129,7 +122,6 @@ export default function WebsiteLandingPage() {
         </div>
       </section>
 
-      {/* Featured Items Section */}
       {featuredItems.length > 0 && (
         <section className="py-16 bg-background">
           <div className="container mx-auto px-4">
@@ -165,7 +157,6 @@ export default function WebsiteLandingPage() {
         </section>
       )}
 
-      {/* Why Choose Us Section */}
       <section className="py-16 bg-secondary/20">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center text-foreground mb-12">لماذا تختارنا؟</h2>
@@ -183,7 +174,6 @@ export default function WebsiteLandingPage() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
       {testimonials.length > 0 && (
         <section className="py-16 bg-background">
           <div className="container mx-auto px-4">
@@ -216,7 +206,6 @@ export default function WebsiteLandingPage() {
         </section>
       )}
 
-      {/* Call to Action / About Us Snippet */}
       <section className="py-20 bg-primary/10">
         <div className="container mx-auto px-4 text-center">
           <MessageSquare className="h-12 w-12 text-primary mx-auto mb-4"/>
@@ -234,4 +223,5 @@ export default function WebsiteLandingPage() {
     </>
   );
 }
-  
+
+    

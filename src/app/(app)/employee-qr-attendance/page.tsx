@@ -11,14 +11,14 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { UserCheck, Camera, QrCode, AlertTriangle, Printer, ScanLine } from 'lucide-react';
 import type { AttendanceRecord, Employee } from '@/constants';
-import { format, differenceInHours, differenceInMinutes, startOfDay, isToday, parseISO } from 'date-fns';
+import { format, differenceInMinutes, startOfDay, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 
-const CURRENT_EMPLOYEE_ID_FOR_QR_GENERATION = 'emp3'; // Used to generate example QR with a known ID
+const CURRENT_EMPLOYEE_ID_FOR_QR_GENERATION = 'emp3'; 
 
 export default function EmployeeQrAttendancePage() {
   const { toast } = useToast();
@@ -84,8 +84,6 @@ export default function EmployeeQrAttendancePage() {
       return;
     }
     handleScanSuccess(scannedDataInput.trim());
-    // In a real app with a scanner library, handleScanSuccess would be called by the library.
-    // For this simulation, we call it directly after user inputs data.
   };
 
   const handleScanSuccess = async (data: string | null) => {
@@ -94,8 +92,8 @@ export default function EmployeeQrAttendancePage() {
       return;
     }
     setIsLoading(true);
-    setScannedDataInput(''); // Clear input after processing
-    setIsScanning(false); // Stop camera simulation
+    setScannedDataInput(''); 
+    setIsScanning(false); 
 
     const parts = data.split(',');
     const actionPart = parts.find(part => part.startsWith('employee_attendance_action:'));
@@ -112,7 +110,7 @@ export default function EmployeeQrAttendancePage() {
     
     let employeeName = "موظف غير معروف";
     try {
-        const employeeResult: Employee[] = await db.select("SELECT name FROM employees WHERE id = $1", [employeeIdFromQr]);
+        const employeeResult: Employee[] = await db.select("SELECT name FROM employees WHERE id = ?", [employeeIdFromQr]);
         if (employeeResult.length > 0) {
             employeeName = employeeResult[0].name;
         } else {
@@ -127,14 +125,13 @@ export default function EmployeeQrAttendancePage() {
         return;
     }
 
-
     const now = new Date();
     const todayStr = format(startOfDay(now), 'yyyy-MM-dd');
     const clockTimeStr = now.toISOString();
 
     if (actionType === 'clock_in') {
       const lastRecords: any[] = await db.select(
-        "SELECT clock_out_time FROM employee_attendance WHERE employee_id = $1 AND attendance_date = $2 ORDER BY clock_in_time DESC LIMIT 1",
+        "SELECT clock_out_time FROM employee_attendance WHERE employee_id = ? AND attendance_date = ? ORDER BY clock_in_time DESC LIMIT 1",
         [employeeIdFromQr, todayStr]
       );
       const lastRecordToday = lastRecords.length > 0 ? lastRecords[0] : null;
@@ -152,7 +149,7 @@ export default function EmployeeQrAttendancePage() {
       const newRecordId = `att-${Date.now()}`;
       try {
         await db.execute(
-          "INSERT INTO employee_attendance (id, employee_id, clock_in_time, attendance_date) VALUES ($1, $2, $3, $4)",
+          "INSERT INTO employee_attendance (id, employee_id, clock_in_time, attendance_date) VALUES (?, ?, ?, ?)",
           [newRecordId, employeeIdFromQr, clockTimeStr, todayStr]
         );
         toast({
@@ -167,7 +164,7 @@ export default function EmployeeQrAttendancePage() {
 
     } else if (actionType === 'clock_out') {
       const lastActiveRecords: any[] = await db.select(
-        "SELECT id, clock_in_time, clock_out_time FROM employee_attendance WHERE employee_id = $1 AND attendance_date = $2 AND clock_out_time IS NULL ORDER BY clock_in_time DESC LIMIT 1",
+        "SELECT id, clock_in_time, clock_out_time FROM employee_attendance WHERE employee_id = ? AND attendance_date = ? AND clock_out_time IS NULL ORDER BY clock_in_time DESC LIMIT 1",
         [employeeIdFromQr, todayStr]
       );
       const lastActiveRecord = lastActiveRecords.length > 0 ? lastActiveRecords[0] : null;
@@ -190,19 +187,19 @@ export default function EmployeeQrAttendancePage() {
       
       try {
         await db.execute(
-          "UPDATE employee_attendance SET clock_out_time = $1, work_duration_hours = $2 WHERE id = $3",
+          "UPDATE employee_attendance SET clock_out_time = ?, work_duration_hours = ? WHERE id = ?",
           [clockTimeStr, workDuration, lastActiveRecord.id]
         );
-        const formatWorkDuration = (clockIn: Date, clockOut?: Date): string => {
-          if (!clockOut) return '-';
-          const totalMinutesVal = differenceInMinutes(clockOut, clockIn);
+        const formatWorkDurationDisplay = (clockInVal: Date, clockOutVal?: Date): string => {
+          if (!clockOutVal) return '-';
+          const totalMinutesVal = differenceInMinutes(clockOutVal, clockInVal);
           const hoursVal = Math.floor(totalMinutesVal / 60);
           const minutesVal = totalMinutesVal % 60;
           return `${hoursVal} س ${minutesVal} د`;
         };
         toast({
           title: "تم تسجيل الانصراف بنجاح",
-          description: `إلى اللقاء يا ${employeeName}! وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(clockInDate, now)}.`,
+          description: `إلى اللقاء يا ${employeeName}! وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDurationDisplay(clockInDate, now)}.`,
           className: "bg-red-500 text-white",
         });
       } catch(error) {
@@ -318,3 +315,5 @@ export default function EmployeeQrAttendancePage() {
     </>
   );
 }
+
+    

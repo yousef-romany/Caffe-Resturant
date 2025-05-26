@@ -39,7 +39,7 @@ export default function FinancialsReportPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
 
-  const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); // Placeholder
+  const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); 
   const [netCashFlow, setNetCashFlow] = useState(0);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
@@ -74,7 +74,6 @@ export default function FinancialsReportPage() {
         const startDateSqlDate = format(startDate, 'yyyy-MM-dd');
         const endDateSqlDate = format(endDate, 'yyyy-MM-dd');
       try {
-        // Fetch revenue for the period
         const revenueResult: any[] = await db.select(
           "SELECT SUM(total_amount) as totalRevenue FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
           [startDateString, endDateString]
@@ -82,11 +81,9 @@ export default function FinancialsReportPage() {
         const revenueForPeriod = Number(revenueResult[0]?.totalRevenue) || 0;
         setTotalRevenue(revenueForPeriod);
 
-        // Fetch salaries (current snapshot)
         const salariesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
         const salaries = Number(salariesResult[0]?.totalSalaries) || 0;
 
-        // Fetch purchase orders amount for the period
         const purchaseOrdersResult: any[] = await db.select(
           "SELECT SUM(total_amount) as totalPurchase FROM purchase_orders WHERE order_date BETWEEN ? AND ?",
           [startDateSqlDate, endDateSqlDate]

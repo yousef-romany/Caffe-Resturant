@@ -31,7 +31,7 @@ import NextImage from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
-import { Switch } from '@/components/ui/switch'; // Added Switch import
+import { Switch } from '@/components/ui/switch'; 
 
 const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { manualCost?: number } = {
   name: '',
@@ -41,7 +41,7 @@ const initialNewItemState: Omit<MenuItem, 'id' | 'imageUrl'> & { manualCost?: nu
   description: '',
   dataAiHint: '',
   ingredients: [],
-  is_available: true, // Default to true
+  is_available: true, 
 };
 
 const calculateMenuItemCost = (
@@ -90,8 +90,7 @@ export default function MenuPage() {
   const { toast } = useToast();
   const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Removed allMenuItemIngredients state as it's not directly used for rendering or re-calculation outside fetch.
-
+  
   useEffect(() => {
     async function loadDbAndFetchData() {
       try {
@@ -133,7 +132,7 @@ export default function MenuPage() {
         return {
           ...item,
           price: Number(item.price) || 0,
-          cost: (recipeIngredients && recipeIngredients.length > 0 && calculatedCost > 0) ? calculatedCost : (item.cost ? Number(item.cost) : 0), // Prioritize calculated cost if positive
+          cost: (recipeIngredients && recipeIngredients.length > 0 && calculatedCost > 0) ? calculatedCost : (item.cost ? Number(item.cost) : 0), 
           ingredients: recipeIngredients,
           is_available: Boolean(item.is_available),
         };
@@ -240,20 +239,20 @@ export default function MenuPage() {
       image_url: newImageUrl,
       description: newItemData.description || null,
       data_ai_hint: newAiHint,
-      is_available: newItemData.is_available === undefined ? true : newItemData.is_available,
+      is_available: newItemData.is_available === undefined ? 1 : (newItemData.is_available ? 1 : 0),
     };
 
     try {
       if (editingItem) {
         await db.execute(
-          'UPDATE menu_items SET name = $1, category = $2, price = $3, cost = $4, image_url = $5, description = $6, data_ai_hint = $7, is_available = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
+          'UPDATE menu_items SET name = ?, category = ?, price = ?, cost = ?, image_url = ?, description = ?, data_ai_hint = ?, is_available = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [menuItemToSave.name, menuItemToSave.category, menuItemToSave.price, menuItemToSave.cost, menuItemToSave.image_url, menuItemToSave.description, menuItemToSave.data_ai_hint, menuItemToSave.is_available, editingItem.id]
         );
-        await db.execute('DELETE FROM menu_item_ingredients WHERE menu_item_id = $1', [editingItem.id]);
+        await db.execute('DELETE FROM menu_item_ingredients WHERE menu_item_id = ?', [editingItem.id]);
         if (newItemData.ingredients && newItemData.ingredients.length > 0) {
           for (const ing of newItemData.ingredients) {
             await db.execute(
-              'INSERT INTO menu_item_ingredients (menu_item_id, ingredient_id, quantity, unit) VALUES ($1, $2, $3, $4)',
+              'INSERT INTO menu_item_ingredients (menu_item_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)',
               [editingItem.id, ing.ingredientId, Number(ing.quantity), ing.unit]
             );
           }
@@ -262,13 +261,13 @@ export default function MenuPage() {
       } else {
         const newItemId = `menu-${Date.now()}`;
         await db.execute(
-          'INSERT INTO menu_items (id, name, category, price, cost, image_url, description, data_ai_hint, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          'INSERT INTO menu_items (id, name, category, price, cost, image_url, description, data_ai_hint, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [newItemId, menuItemToSave.name, menuItemToSave.category, menuItemToSave.price, menuItemToSave.cost, menuItemToSave.image_url, menuItemToSave.description, menuItemToSave.data_ai_hint, menuItemToSave.is_available]
         );
         if (newItemData.ingredients && newItemData.ingredients.length > 0) {
           for (const ing of newItemData.ingredients) {
             await db.execute(
-              'INSERT INTO menu_item_ingredients (menu_item_id, ingredient_id, quantity, unit) VALUES ($1, $2, $3, $4)',
+              'INSERT INTO menu_item_ingredients (menu_item_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)',
               [newItemId, ing.ingredientId, Number(ing.quantity), ing.unit]
             );
           }
@@ -281,7 +280,7 @@ export default function MenuPage() {
       if(db) await fetchAllMenuData(db);
     } catch (error) {
       console.error("Error submitting menu item:", error);
-      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات عنصر القائمة.", variant: "destructive" });
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات عنصر القائمة. قد يكون الاسم مكرر.", variant: "destructive" });
     }
   };
 
@@ -291,7 +290,7 @@ export default function MenuPage() {
       name: item.name,
       category: item.category,
       price: item.price,
-      manualCost: (item.ingredients && item.ingredients.length > 0) ? undefined : item.cost, // Set manualCost if no ingredients, else it's calculated
+      manualCost: (item.ingredients && item.ingredients.length > 0) ? undefined : item.cost, 
       description: item.description || '',
       imageUrl: item.imageUrl,
       dataAiHint: item.dataAiHint || '',
@@ -304,20 +303,13 @@ export default function MenuPage() {
   const handleDeleteItem = async (itemToDelete: MenuItem) => {
     if (!db) return;
     try {
-      // First, delete related records in order_items if ON DELETE RESTRICT is used for menu_item_id
-      // However, if the user wants to delete a menu item, it's often implied that it should be removable even if ordered before.
-      // A soft delete (is_available = false) is usually preferred for items with history.
-      // For a hard delete with potential RESTRICT constraints, one might need to handle it.
-      // Current schema implies menu_item_id in order_items is RESTRICT.
-      // We should check if this item is part of any order.
-      const orderItemCheck: any[] = await db.select('SELECT 1 FROM order_items WHERE menu_item_id = $1 LIMIT 1', [itemToDelete.id]);
+      const orderItemCheck: any[] = await db.select('SELECT 1 FROM order_items WHERE menu_item_id = ? LIMIT 1', [itemToDelete.id]);
       if (orderItemCheck.length > 0) {
         toast({ title: "خطأ في الحذف", description: "لا يمكن حذف هذا العنصر لأنه مستخدم في طلبات سابقة. يمكنك جعله 'غير متوفر' بدلاً من ذلك.", variant: "destructive" });
         return;
       }
 
-      // If ON DELETE CASCADE is set for menu_item_id in menu_item_ingredients, this will also delete recipes.
-      await db.execute('DELETE FROM menu_items WHERE id = $1', [itemToDelete.id]);
+      await db.execute('DELETE FROM menu_items WHERE id = ?', [itemToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف ${itemToDelete.name}.`, variant: "destructive" });
       if(db) await fetchAllMenuData(db);
     } catch (error: any) {
@@ -550,4 +542,5 @@ export default function MenuPage() {
     </>
   );
 }
+
     

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -10,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, type Order, type OrderType, type Table, type OrderStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
+import { ITEM_CATEGORIES, type MenuItem, type OrderItem, type Category, type Order, type OrderType, type Table, type TableStatus, DEFAULT_VAT_PERCENTAGE } from '@/constants';
 import { Search, XCircle, MinusCircle, PlusCircle, DollarSign, ShoppingCart, Edit2, Receipt, Table2 as TableIcon, Printer, Percent, Store, Car, Utensils } from 'lucide-react';
 import {
   Dialog,
@@ -155,8 +154,8 @@ export default function POSPage() {
   
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [confirmedOrderForInvoice, setConfirmedOrderForInvoice] = useState<Order | null>(null);
-  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); // To store ID of order being edited
-  const [currentOrderNumber, setCurrentOrderNumber] = useState<string | null>(null); // To display order number when editing
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null); 
+  const [currentOrderNumber, setCurrentOrderNumber] = useState<string | null>(null); 
   const [invoiceLanguage, setInvoiceLanguage] = useState<'ar' | 'en'>('ar');
 
   const [isDiscountEnabled, setIsDiscountEnabled] = useState(false);
@@ -233,11 +232,11 @@ export default function POSPage() {
 
         if (orderIdFromStorage) { 
           setCurrentOrderId(orderIdFromStorage);
-          const existingOrderResult: any[] = await dbInstance.select("SELECT * FROM orders WHERE id = $1", [orderIdFromStorage]);
+          const existingOrderResult: any[] = await dbInstance.select("SELECT * FROM orders WHERE id = ?", [orderIdFromStorage]);
           if (existingOrderResult.length > 0) {
             const existingOrder = existingOrderResult[0];
             const itemsResult: any[] = await dbInstance.select(
-              "SELECT mi.id, mi.name, mi.category, oi.price_at_order as price, oi.quantity, oi.notes, mi.image_url as imageUrl, mi.data_ai_hint as dataAiHint FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE oi.order_id = $1",
+              "SELECT mi.id, mi.name, mi.category, oi.price_at_order as price, oi.quantity, oi.notes, mi.image_url as imageUrl, mi.data_ai_hint as dataAiHint FROM order_items oi JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE oi.order_id = ?",
               [orderIdFromStorage]
             );
 
@@ -246,7 +245,7 @@ export default function POSPage() {
             setCurrentOrderNumber(existingOrder.order_number);
 
             if (existingOrder.type === 'صالة' && existingOrder.table_id) {
-              const tableInfo: any[] = await dbInstance.select("SELECT number FROM tables_info WHERE id = $1", [existingOrder.table_id]);
+              const tableInfo: any[] = await dbInstance.select("SELECT number FROM tables_info WHERE id = ?", [existingOrder.table_id]);
               if (tableInfo.length > 0) {
                 setTableNumber(tableInfo[0].number);
                 setTableId(existingOrder.table_id);
@@ -266,7 +265,7 @@ export default function POSPage() {
           setOrderType('صالة');
           setTableNumber(tableNumFromStorage);
           setTableId(tableIdFromStorage);
-          const tableStatusResult: any[] = await dbInstance.select("SELECT status FROM tables_info WHERE id = $1", [tableIdFromStorage]);
+          const tableStatusResult: any[] = await dbInstance.select("SELECT status FROM tables_info WHERE id = ?", [tableIdFromStorage]);
           if (tableStatusResult.length > 0 && tableStatusResult[0].status !== 'متاحة' && tableStatusResult[0].status !== 'محجوزة') {
              toast({ title: "تنبيه", description: `الطاولة ${tableNumFromStorage} مشغولة حاليًا بطلب آخر أو تحتاج تنظيف.`, variant: "destructive"});
              resetPOSSession(true); 
@@ -292,10 +291,10 @@ export default function POSPage() {
   const availableTablesForSelection = useMemo(() => {
     if (currentOrderId && orderType === 'صالة' && tableId) { 
         const currentTableInList = dbAvailableTables.find(t => t.id === tableId);
-        if (currentTableInList) return [currentTableInList]; // If current table is 'available'
-        // If current table is 'مشغولة', it won't be in dbAvailableTables. Add it manually.
-        const currentTableFromDb = tables.find(t => t.id === tableId); // Assuming 'tables' is a full list
-        if (currentTableFromDb) return [currentTableFromDb];
+        if (currentTableInList) return [currentTableInList]; 
+        // If current table is not in dbAvailableTables (e.g., 'مشغولة'), try to fetch its info
+        // This part might need adjustment if 'tables' (full list) is not readily available on client
+        // For now, we'll assume it's okay or the POS prevents changing tables for existing orders
         return tableNumber && tableId ? [{id: tableId, number: tableNumber, capacity:0, status: 'مشغولة' as TableStatus}] : [];
     }
     return dbAvailableTables;
@@ -418,17 +417,17 @@ export default function POSPage() {
     try {
       setIsLoading(true);
       if (currentOrderId) { 
-        const existingOrderDataResult: any[] = await db.select("SELECT status, created_at, order_number FROM orders WHERE id = $1", [currentOrderId]);
+        const existingOrderDataResult: any[] = await db.select("SELECT status, created_at, order_number FROM orders WHERE id = ?", [currentOrderId]);
         if (existingOrderDataResult.length === 0) {
             toast({ title: "خطأ", description: "لم يتم العثور على الطلب المراد تحديثه.", variant: "destructive" });
             setIsLoading(false);
             return;
         }
         const existingOrderData = existingOrderDataResult[0];
-        orderStatusForNewOrder = existingOrderData.status as OrderStatus; // Keep current status or update if needed
+        orderStatusForNewOrder = existingOrderData.status as OrderStatus; 
 
         await db.execute(
-          "UPDATE orders SET type = $1, customer_name = $2, delivery_address = $3, notes = $4, subtotal = $5, discount_percentage = $6, discount_amount = $7, vat_percentage = $8, vat_amount = $9, total_amount = $10, updated_at = $11, table_id = $12 WHERE id = $13",
+          "UPDATE orders SET type = ?, customer_name = ?, delivery_address = ?, notes = ?, subtotal = ?, discount_percentage = ?, discount_amount = ?, vat_percentage = ?, vat_amount = ?, total_amount = ?, updated_at = ?, table_id = ? WHERE id = ?",
           [
             orderType, customerName.trim() || null, deliveryAddress.trim() || null, generalOrderNotes.trim() || null,
             subtotal, isDiscountEnabled ? discountPercentage : null, isDiscountEnabled ? discountAmount : null,
@@ -436,12 +435,12 @@ export default function POSPage() {
             orderType === 'صالة' ? tableId : null, currentOrderId
           ]
         );
-        await db.execute("DELETE FROM order_items WHERE order_id = $1", [currentOrderId]);
+        await db.execute("DELETE FROM order_items WHERE order_id = ?", [currentOrderId]);
         for (const item of currentOrder) {
-          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = ?", [item.id]);
           const itemCost = itemCostResult.length > 0 ? Number(itemCostResult[0].cost) || 0 : 0;
           await db.execute(
-            "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [`oi-${Date.now()}-${item.id}`, currentOrderId, item.id, item.name, item.quantity, item.price, itemCost, item.notes || null]
           );
         }
@@ -464,7 +463,7 @@ export default function POSPage() {
         const newOrderIdValue = `order-${Date.now()}`;
         const newOrderNumber = `ORD-${Date.now().toString().slice(-6)}`;
         await db.execute(
-          "INSERT INTO orders (id, order_number, type, customer_name, delivery_address, notes, subtotal, discount_percentage, discount_amount, vat_percentage, vat_amount, total_amount, status, created_at, updated_at, table_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+          "INSERT INTO orders (id, order_number, type, customer_name, delivery_address, notes, subtotal, discount_percentage, discount_amount, vat_percentage, vat_amount, total_amount, status, created_at, updated_at, table_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             newOrderIdValue, newOrderNumber, orderType, customerName.trim() || null, deliveryAddress.trim() || null, generalOrderNotes.trim() || null,
             subtotal, isDiscountEnabled ? discountPercentage : null, isDiscountEnabled ? discountAmount : null,
@@ -473,15 +472,15 @@ export default function POSPage() {
           ]
         );
         for (const item of currentOrder) {
-          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+          const itemCostResult: any[] = await db.select("SELECT cost FROM menu_items WHERE id = ?", [item.id]);
           const itemCost = itemCostResult.length > 0 ? Number(itemCostResult[0].cost) || 0 : 0;
           await db.execute(
-            "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [`oi-${Date.now()}-${item.id}`, newOrderIdValue, item.id, item.name, item.quantity, item.price, itemCost, item.notes || null]
           );
         }
         if (orderType === 'صالة' && tableId) {
-          await db.execute("UPDATE tables_info SET status = 'مشغولة', current_order_id = $1, updated_at = $2 WHERE id = $3", [newOrderIdValue, now, tableId]);
+          await db.execute("UPDATE tables_info SET status = 'مشغولة', current_order_id = ?, updated_at = ? WHERE id = ?", [newOrderIdValue, now, tableId]);
         }
         orderToConfirmForInvoice = { 
             id: newOrderIdValue, orderNumber: newOrderNumber, items: currentOrder, totalAmount: finalTotal, 
@@ -927,12 +926,10 @@ export default function POSPage() {
               <Button type="button" className="bg-green-500 hover:bg-green-600 text-white" onClick={async () => { 
                   if(db && confirmedOrderForInvoice) {
                     try {
-                        await db.execute("UPDATE orders SET status = 'مكتمل', completed_at = $1, updated_at = $1 WHERE id = $2", [new Date().toISOString(), confirmedOrderForInvoice.id]);
-                        if (confirmedOrderForInvoice.type === 'صالة' && confirmedOrderForInvoice.tableNumber) {
-                            const tableResult: any[] = await db.select("SELECT id FROM tables_info WHERE number = $1", [confirmedOrderForInvoice.tableNumber]);
-                            if(tableResult.length > 0) {
-                                await db.execute("UPDATE tables_info SET status = 'تحتاج تنظيف', current_order_id = NULL, updated_at = $1 WHERE id = $2", [new Date().toISOString(), tableResult[0].id]);
-                            }
+                        await db.execute("UPDATE orders SET status = 'مكتمل', completed_at = ?, updated_at = ? WHERE id = ?", [new Date().toISOString(), new Date().toISOString(), confirmedOrderForInvoice.id]);
+                        if (confirmedOrderForInvoice.type === 'صالة' && confirmedOrderForInvoice.tableId) { // Check if tableId exists
+                            // No need to fetch table number again, use confirmedOrderForInvoice.tableId
+                            await db.execute("UPDATE tables_info SET status = 'تحتاج تنظيف', current_order_id = NULL, updated_at = ? WHERE id = ?", [new Date().toISOString(), confirmedOrderForInvoice.tableId]);
                         }
                         toast({title: "تمت المحاسبة بنجاح"}); 
                     } catch (err) {

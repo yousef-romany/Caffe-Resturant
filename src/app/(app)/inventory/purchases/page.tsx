@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card';
-import { type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient as StockIngredient, type IngredientUnit, type PurchaseOrderStatus, INGREDIENT_UNITS } from '@/constants'; // Changed Ingredient to StockIngredient
+import { type PurchaseOrder, type PurchaseOrderItem, type Supplier, type Ingredient as StockIngredient, type IngredientUnit, type PurchaseOrderStatus, INGREDIENT_UNITS } from '@/constants'; 
 import { PlusCircle, Edit, Trash2, ListChecks, PackagePlus, X, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
@@ -64,7 +64,7 @@ export default function PurchaseOrdersPage() {
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [newPurchaseOrderData, setNewPurchaseOrderData] = useState(initialNewPurchaseOrderState);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]); // Changed from ingredients
+  const [stockIngredients, setStockIngredients] = useState<StockIngredient[]>([]); 
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [viewingPurchaseOrder, setViewingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
@@ -90,8 +90,7 @@ export default function PurchaseOrdersPage() {
         console.error("Failed to initialize DB or fetch data:", error);
         toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات أوامر الشراء أو البيانات المرتبطة.", variant: "destructive" });
       } finally {
-        // Overall loading state can be more complex if needed, or just wait for all.
-        setIsLoading(false); // Assume main data loading is POs
+        setIsLoading(false); 
       }
     }
     loadDbAndFetchData();
@@ -106,7 +105,7 @@ export default function PurchaseOrdersPage() {
       );
       const posWithItems = await Promise.all(fetchedPOs.map(async (po) => {
         const itemsRaw: any[] = await currentDb.select(
-          'SELECT ingredient_id as ingredientId, ingredient_name as ingredientName, quantity, cost_per_unit_at_purchase as costPerUnit, unit_at_purchase as unit FROM purchase_order_items WHERE purchase_order_id = $1',
+          'SELECT ingredient_id as ingredientId, ingredient_name as ingredientName, quantity, cost_per_unit_at_purchase as costPerUnit, unit_at_purchase as unit FROM purchase_order_items WHERE purchase_order_id = ?',
           [po.id]
         );
         const items: PurchaseOrderItem[] = itemsRaw.map(item => ({
@@ -153,7 +152,7 @@ export default function PurchaseOrdersPage() {
     setIsLoadingIngredients(true);
     try {
       const fetchedIngredients: StockIngredient[] = await currentDb.select(
-        'SELECT id, name, unit, cost_per_unit as costPerUnit FROM ingredients ORDER BY name' // Assuming StockIngredient type matches
+        'SELECT id, name, unit, cost_per_unit as costPerUnit FROM ingredients ORDER BY name'
       );
       setStockIngredients(fetchedIngredients.map(ing => ({
         ...ing,
@@ -258,22 +257,21 @@ export default function PurchaseOrdersPage() {
         status: newPurchaseOrderData.status,
         order_date: newPurchaseOrderData.orderDate ? format(new Date(newPurchaseOrderData.orderDate), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         expected_delivery_date: newPurchaseOrderData.expectedDeliveryDate ? format(new Date(newPurchaseOrderData.expectedDeliveryDate), 'yyyy-MM-dd') : null,
-        received_date: newPurchaseOrderData.status === 'مستلم' && newPurchaseOrderData.receivedDate ? format(new Date(newPurchaseOrderData.receivedDate), 'yyyy-MM-dd') : (newPurchaseOrderData.status === 'مستلم' && !newPurchaseOrderData.receivedDate ? format(new Date(), 'yyyy-MM-dd') : null),
+        received_date: newPurchaseOrderData.status === 'مستلم' && (newPurchaseOrderData as any).receivedDate ? format(new Date((newPurchaseOrderData as any).receivedDate), 'yyyy-MM-dd') : (newPurchaseOrderData.status === 'مستلم' && !(newPurchaseOrderData as any).receivedDate ? format(new Date(), 'yyyy-MM-dd') : null),
         notes: newPurchaseOrderData.notes || null,
     };
 
     try {
       if (editingPurchaseOrder) {
         await db.execute(
-          'UPDATE purchase_orders SET supplier_id=$1, supplier_name=$2, total_amount=$3, status=$4, order_date=$5, expected_delivery_date=$6, received_date=$7, notes=$8, updated_at=CURRENT_TIMESTAMP WHERE id=$9',
+          'UPDATE purchase_orders SET supplier_id=?, supplier_name=?, total_amount=?, status=?, order_date=?, expected_delivery_date=?, received_date=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
           [poDataToSave.supplier_id, poDataToSave.supplier_name, poDataToSave.total_amount, poDataToSave.status, poDataToSave.order_date, poDataToSave.expected_delivery_date, poDataToSave.received_date, poDataToSave.notes, editingPurchaseOrder.id]
         );
-        // Delete old items and insert new ones
-        await db.execute('DELETE FROM purchase_order_items WHERE purchase_order_id=$1', [editingPurchaseOrder.id]);
+        await db.execute('DELETE FROM purchase_order_items WHERE purchase_order_id=?', [editingPurchaseOrder.id]);
         for (const item of newPurchaseOrderData.items) {
           const newItemId = `poi-${Date.now()}-${item.ingredientId}`;
           await db.execute(
-            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [newItemId, editingPurchaseOrder.id, item.ingredientId, item.ingredientName, item.quantity, item.costPerUnit, item.unit]
           );
         }
@@ -282,13 +280,13 @@ export default function PurchaseOrdersPage() {
         const newPOId = `po-${Date.now()}`;
         const newPONumber = `PO-${Date.now().toString().slice(-5)}`;
         await db.execute(
-          'INSERT INTO purchase_orders (id, order_number, supplier_id, supplier_name, total_amount, status, order_date, expected_delivery_date, received_date, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          'INSERT INTO purchase_orders (id, order_number, supplier_id, supplier_name, total_amount, status, order_date, expected_delivery_date, received_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [newPOId, newPONumber, poDataToSave.supplier_id, poDataToSave.supplier_name, poDataToSave.total_amount, poDataToSave.status, poDataToSave.order_date, poDataToSave.expected_delivery_date, poDataToSave.received_date, poDataToSave.notes]
         );
         for (const item of newPurchaseOrderData.items) {
            const newItemId = `poi-${Date.now()}-${item.ingredientId}`;
           await db.execute(
-            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            'INSERT INTO purchase_order_items (id, purchase_order_id, ingredient_id, ingredient_name, quantity, cost_per_unit_at_purchase, unit_at_purchase) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [newItemId, newPOId, item.ingredientId, item.ingredientName, item.quantity, item.costPerUnit, item.unit]
           );
         }
@@ -297,7 +295,7 @@ export default function PurchaseOrdersPage() {
       setIsDialogOpen(false);
       setEditingPurchaseOrder(null);
       setNewPurchaseOrderData(initialNewPurchaseOrderState);
-      await fetchPurchaseOrders(db);
+      if (db) await fetchPurchaseOrders(db);
     } catch (error) {
       console.error("Error submitting purchase order:", error);
       toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات أمر الشراء.", variant: "destructive" });
@@ -309,7 +307,7 @@ export default function PurchaseOrdersPage() {
     setNewPurchaseOrderData({
         supplierId: po.supplierId,
         supplierName: po.supplierName,
-        items: po.items.map(item => ({...item})), // Deep copy items
+        items: po.items.map(item => ({...item})), 
         status: po.status,
         orderDate: format(new Date(po.orderDate), 'yyyy-MM-dd'),
         expectedDeliveryDate: po.expectedDeliveryDate ? format(new Date(po.expectedDeliveryDate), 'yyyy-MM-dd') : '',
@@ -322,10 +320,9 @@ export default function PurchaseOrdersPage() {
   const handleDeletePurchaseOrder = async (poToDelete: PurchaseOrder) => {
     if (!db) return;
     try {
-      await db.execute('DELETE FROM purchase_orders WHERE id = $1', [poToDelete.id]);
-      // purchase_order_items should be deleted by CASCADE constraint
+      await db.execute('DELETE FROM purchase_orders WHERE id = ?', [poToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف أمر الشراء ${poToDelete.orderNumber}.`, variant: "destructive" });
-      await fetchPurchaseOrders(db);
+      if (db) await fetchPurchaseOrders(db);
     } catch (error) {
         console.error("Error deleting purchase order:", error);
         toast({ title: "خطأ في الحذف", description: "فشل حذف أمر الشراء.", variant: "destructive" });
@@ -388,7 +385,7 @@ export default function PurchaseOrdersPage() {
                             po.status === 'مستلم' ? 'bg-green-100 text-green-700' : 
                             po.status === 'مؤكد' ? 'bg-blue-100 text-blue-700' :
                             po.status === 'معلق' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700' // For 'ملغى'
+                            'bg-red-100 text-red-700' 
                         }`}>{po.status}</span>
                     </TableCell>
                     <TableCell className="text-left">${po.totalAmount.toFixed(2)}</TableCell>

@@ -44,13 +44,13 @@ export default function AttendancePage() {
       }
     }
     initializeAndFetchData();
-  }, [toast]); // Re-fetch if db instance changes or toast changes (though toast is stable)
+  }, [toast]); 
 
   const fetchEmployeeAndAttendanceData = async (currentDb: Database) => {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      const employeeResult: Employee[] = await currentDb.select("SELECT name FROM employees WHERE id = $1", [CURRENT_EMPLOYEE_ID]);
+      const employeeResult: Employee[] = await currentDb.select("SELECT name FROM employees WHERE id = ?", [CURRENT_EMPLOYEE_ID]);
       if (employeeResult.length > 0) {
         setEmployeeName(employeeResult[0].name);
       } else {
@@ -59,7 +59,7 @@ export default function AttendancePage() {
 
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const attendanceResult: any[] = await currentDb.select(
-        "SELECT id, clock_in_time, clock_out_time, attendance_date, work_duration_hours FROM employee_attendance WHERE employee_id = $1 AND attendance_date = $2 ORDER BY clock_in_time DESC",
+        "SELECT id, clock_in_time, clock_out_time, attendance_date, work_duration_hours FROM employee_attendance WHERE employee_id = ? AND attendance_date = ? ORDER BY clock_in_time DESC",
         [CURRENT_EMPLOYEE_ID, todayStr]
       );
       
@@ -116,7 +116,7 @@ export default function AttendancePage() {
 
     try {
       await db.execute(
-        "INSERT INTO employee_attendance (id, employee_id, clock_in_time, attendance_date) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO employee_attendance (id, employee_id, clock_in_time, attendance_date) VALUES (?, ?, ?, ?)",
         [newRecordId, CURRENT_EMPLOYEE_ID, clockInTimeStr, attendanceDateStr]
       );
       
@@ -127,7 +127,7 @@ export default function AttendancePage() {
         description: `وقت الحضور: ${format(now, 'p', { locale: arSA })}`,
         className: "bg-green-500 text-white",
       });
-      await fetchEmployeeAndAttendanceData(db); // Refresh data
+      if (db) await fetchEmployeeAndAttendanceData(db); 
     } catch (error) {
         console.error("Error clocking in:", error);
         toast({ title: "خطأ في تسجيل الحضور", description: "فشل حفظ سجل الحضور.", variant: "destructive"});
@@ -157,7 +157,7 @@ export default function AttendancePage() {
 
       try {
         await db.execute(
-          "UPDATE employee_attendance SET clock_out_time = $1, work_duration_hours = $2 WHERE id = $3",
+          "UPDATE employee_attendance SET clock_out_time = ?, work_duration_hours = ? WHERE id = ?",
           [clockOutTimeStr, workDuration, activeClockInId]
         );
 
@@ -168,7 +168,7 @@ export default function AttendancePage() {
           description: `وقت الانصراف: ${format(now, 'p', { locale: arSA })}. مدة العمل: ${formatWorkDuration(clockInDate, now)}.`,
           className: "bg-red-500 text-white",
         });
-        await fetchEmployeeAndAttendanceData(db); // Refresh data
+        if (db) await fetchEmployeeAndAttendanceData(db); 
       } catch (error) {
         console.error("Error clocking out:", error);
         toast({ title: "خطأ في تسجيل الانصراف", description: "فشل تحديث سجل الحضور.", variant: "destructive"});
@@ -258,3 +258,5 @@ export default function AttendancePage() {
     </>
   );
 }
+
+    

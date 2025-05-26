@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DUMMY_EMPLOYEES } from '@/constants'; // Keep for salary estimation for now
 import { Users, Package, TrendingDown, CalendarDays } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, isValid } from 'date-fns';
@@ -69,19 +68,17 @@ export default function ExpensesReportPage() {
     async function fetchExpensesData() {
       setIsLoading(true);
       const { startDate, endDate } = getPeriodDateRange(selectedPeriod);
-      const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss');
-      const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
+      // const startDateString = format(startDate, 'yyyy-MM-dd HH:mm:ss'); // Not needed if PO order_date is DATE
+      // const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss'); // Not needed if PO order_date is DATE
 
       try {
-        // Calculate total salaries (snapshot of current active employees)
         const employeesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
         const salaries = Number(employeesResult[0]?.totalSalaries) || 0;
         setTotalSalariesPaid(salaries); 
 
-        // Calculate purchase amount for the selected period
         const purchaseOrdersResult: any[] = await db.select(
             "SELECT SUM(total_amount) as totalPurchase FROM purchase_orders WHERE order_date BETWEEN ? AND ?",
-            [format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')] // Assuming order_date is DATE type
+            [format(startDate, 'yyyy-MM-dd'), format(endDate, 'yyyy-MM-dd')] 
         );
         const poAmount = Number(purchaseOrdersResult[0]?.totalPurchase) || 0;
         setTotalPurchaseAmount(poAmount);

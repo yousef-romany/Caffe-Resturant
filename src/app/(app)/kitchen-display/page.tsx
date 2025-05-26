@@ -14,12 +14,12 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useRouter, usePathname } from 'next/navigation'; // usePathname for re-triggering useEffect
+import { useRouter, usePathname } from 'next/navigation'; 
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 
-const PENDING_LATE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-const PREPARING_LATE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+const PENDING_LATE_THRESHOLD_MS = 5 * 60 * 1000; 
+const PREPARING_LATE_THRESHOLD_MS = 10 * 60 * 1000; 
 
 interface KitchenOrderCardProps {
   order: Order;
@@ -118,7 +118,7 @@ function KitchenOrderCard({ order, onStartPreparing, onMarkAsReady, displayCateg
 
 export default function KitchenDisplayPage() {
   const router = useRouter();
-  const pathname = usePathname(); // To re-trigger useEffect on navigation to this page
+  const pathname = usePathname(); 
   const { toast } = useToast();
 
   const [db, setDbInstance] = useState<Database | null>(null);
@@ -126,7 +126,7 @@ export default function KitchenDisplayPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategorySlug, setActiveCategorySlug] = useState<CategorySlug | null>(null);
   const [activeCategoryInfo, setActiveCategoryInfo] = useState<{ name: Category; icon: LucideIcon; slug: CategorySlug } | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState(true); // Assume authorized until checked
+  const [isAuthorized, setIsAuthorized] = useState(true); 
 
   const fetchOrdersForCategory = useCallback(async (categoryName: Category, currentDb: Database) => {
     if (!currentDb) return;
@@ -139,8 +139,11 @@ export default function KitchenDisplayPage() {
       const tableIds = fetchedOrdersRaw.filter(o => o.table_id).map(o => o.table_id);
       let tableNumberMap: Record<string, string> = {};
       if (tableIds.length > 0) {
+        // Constructing IN clause dynamically for SQL
+        const placeholders = tableIds.map(() => '?').join(',');
         const tableNumbersRaw: any[] = await currentDb.select(
-          `SELECT id, number FROM tables_info WHERE id IN (${tableIds.map(id => `'${id}'`).join(',')})`
+          `SELECT id, number FROM tables_info WHERE id IN (${placeholders})`,
+          tableIds
         );
         tableNumberMap = tableNumbersRaw.reduce((acc, curr) => {
           acc[curr.id] = curr.number;
@@ -154,7 +157,7 @@ export default function KitchenDisplayPage() {
           `SELECT oi.menu_item_id as id, oi.menu_item_name as name, oi.quantity, oi.price_at_order as price, oi.notes, mi.image_url as imageUrl, mi.data_ai_hint as dataAiHint, mi.category 
            FROM order_items oi 
            JOIN menu_items mi ON oi.menu_item_id = mi.id 
-           WHERE oi.order_id = $1`,
+           WHERE oi.order_id = ?`,
           [orderRaw.id]
         );
 
@@ -202,27 +205,23 @@ export default function KitchenDisplayPage() {
       let slugToLoad: CategorySlug | null = null;
       let categoryInfo: { name: Category; icon: LucideIcon; slug: CategorySlug } | null = null;
 
-      // 1. Try to load from localStorage
       const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
       if (storedSlug && CATEGORY_SLUG_MAP[storedSlug]) {
         slugToLoad = storedSlug;
         categoryInfo = CATEGORY_SLUG_MAP[slugToLoad];
       }
 
-      // Helper to check authorization
       const isUserAuthorizedForCategory = (catInfo: typeof categoryInfo) => {
         if (!catInfo) return false;
         return CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length === 0 || 
                CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.includes(catInfo.name);
       };
 
-      // 2. If localStorage value is not valid or not authorized, determine a default
       if (!categoryInfo || !isUserAuthorizedForCategory(categoryInfo)) {
-        slugToLoad = null; // Reset slugToLoad if current one is not good
+        slugToLoad = null; 
         categoryInfo = null;
 
         if (CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0) {
-          // Find the first authorized category
           for (const catName of CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES) {
             const foundSlug = Object.values(CATEGORY_SLUG_MAP).find(c => c.name === catName)?.slug;
             if (foundSlug) {
@@ -232,7 +231,6 @@ export default function KitchenDisplayPage() {
             }
           }
         } else {
-          // If no specific assignments, default to the first category in the system
           const firstSystemCategorySlug = Object.keys(CATEGORY_SLUG_MAP)[0] as CategorySlug | undefined;
           if (firstSystemCategorySlug) {
             slugToLoad = firstSystemCategorySlug;
@@ -246,16 +244,15 @@ export default function KitchenDisplayPage() {
       if (categoryInfo && slugToLoad) {
         setActiveCategorySlug(slugToLoad);
         setActiveCategoryInfo(categoryInfo);
-        localStorage.setItem('selectedKitchenCategorySlug', slugToLoad); // Update localStorage with the final active slug
+        localStorage.setItem('selectedKitchenCategorySlug', slugToLoad); 
         if (dbInstance) {
           fetchOrdersForCategory(categoryInfo.name, dbInstance);
         }
       } else {
         setActiveCategoryInfo(null);
         setActiveCategorySlug(null);
-        setIsLoading(false); // No valid category, stop loading
+        setIsLoading(false); 
         if (CURRENT_KITCHEN_STAFF_ASSIGNED_CATEGORIES.length > 0 && !slugToLoad) {
-          // User has assignments, but none match available categories
           toast({ title: "خطأ في الإعداد", description: "الأقسام المخصصة لك غير موجودة في النظام.", variant: "destructive" });
         } else if (Object.keys(CATEGORY_SLUG_MAP).length === 0) {
             toast({ title: "خطأ", description: "لم يتم تعريف أقسام للمطبخ في النظام.", variant: "destructive" });
@@ -263,8 +260,6 @@ export default function KitchenDisplayPage() {
       }
     }
     initializeDbAndCategory();
-  // Effect dependencies: pathname ensures re-evaluation if navigated via router.push('/kitchen-display')
-  // db ensures it runs after db is initialized.
   }, [pathname, db, toast, fetchOrdersForCategory]);
 
 
@@ -291,7 +286,7 @@ export default function KitchenDisplayPage() {
 
     try {
       await db.execute(sql, params);
-      fetchOrdersForCategory(activeCategoryInfo.name, db); // Re-fetch to update UI
+      fetchOrdersForCategory(activeCategoryInfo.name, db); 
       toast({
         title: newStatus === 'قيد التجهيز' ? "بدء التجهيز" : "تم الانتهاء",
         description: `تم تحديث حالة الطلب بنجاح.`,
@@ -315,7 +310,7 @@ export default function KitchenDisplayPage() {
     return false;
   };
 
-  if (isLoading && !activeCategoryInfo && !db) { // Initial loading state before DB and category logic
+  if (isLoading && !activeCategoryInfo && !db) { 
     return (
       <>
         <PageHeader title="شاشة المطبخ" description="جارٍ تحميل بيانات المطبخ..." />
@@ -324,7 +319,7 @@ export default function KitchenDisplayPage() {
     );
   }
   
-  if (!activeCategoryInfo) { // If no category could be determined
+  if (!activeCategoryInfo) { 
     return (
       <>
         <PageHeader title="شاشة المطبخ" icon={ChefHat} description="لم يتم تحديد قسم صالح لعرضه." />
@@ -337,7 +332,7 @@ export default function KitchenDisplayPage() {
     );
   }
   
-  if (!isAuthorized) { // If determined category is not authorized for the user
+  if (!isAuthorized) { 
     return (
       <>
         <PageHeader title="غير مصرح به" description={`ليس لديك الصلاحية لعرض قسم ${activeCategoryInfo.name}.`} icon={Ban} />
@@ -356,7 +351,7 @@ export default function KitchenDisplayPage() {
   return (
     <>
       <PageHeader title={`شاشة المطبخ - ${activeCategoryInfo.name}`} description={`إدارة الطلبات النشطة لقسم ${activeCategoryInfo.name}.`} icon={activeCategoryInfo.icon} />
-      {isLoading ? ( // Loading state while fetching orders for the determined category
+      {isLoading ? ( 
          <p className="text-center text-muted-foreground py-10">جارٍ تحميل طلبات قسم {activeCategoryInfo.name}...</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-12rem)]">
@@ -416,3 +411,5 @@ export default function KitchenDisplayPage() {
     </>
   );
 }
+
+    
