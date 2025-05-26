@@ -47,7 +47,7 @@ export default function SettingsPage() {
     async function initializeDbAndLoadSettings() {
       setIsLoading(true);
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
         if (dbInstance) {
           await loadAllSettings(dbInstance);

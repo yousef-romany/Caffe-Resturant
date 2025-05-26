@@ -282,7 +282,7 @@ export interface SystemUser {
   username: string;
   hashedPassword?: string; 
   employeeId?: string;
-  fullName?: string;
+  full_name?: string;
   roles: string[]; 
   isActive: boolean;
 }

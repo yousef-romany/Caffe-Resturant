@@ -196,7 +196,7 @@ export default function KitchenDisplayPage() {
 
   useEffect(() => {
     async function initializeDbAndCategory() {
-      const dbInstance = await getDb();
+      const dbInstance = await getDb;
       setDbInstance(dbInstance);
 
       let slugToLoad: CategorySlug | null = null;
