@@ -18,8 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getDb } from '@/lib/db';
-import type { Database } from '@tauri-apps/plugin-sql';
-
 
 const initialNewUserState: Omit<SystemUser, 'id' | 'hashedPassword'> & { password?: string } = {
   username: '',
@@ -138,11 +136,7 @@ export default function UserManagementPage() {
   const handleUserActiveChangeSwitch = async (userId: string, isActive: boolean) => {
     if (!db) return;
     try {
-<<<<<<< HEAD
       await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [Number(isActive), userId]);
-=======
-      await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, userId]);
->>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
       setSystemUsers(prevUsers =>
         prevUsers.map(u =>
         u.id === userId ? { ...u, isActive: isActive } : u
@@ -191,12 +185,8 @@ export default function UserManagementPage() {
 
     try {
       if (editingUser) {
-<<<<<<< HEAD
         // Update existing user
         const updateFields: any[] = [newUserData.username, newUserData.full_name, newUserData.employeeId, Number(newUserData.isActive)];
-=======
-        const updateFields: any[] = [newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.isActive ? 1 : 0];
->>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
         let sql = 'UPDATE system_users SET username = ?, full_name = ?, employee_id = ?, is_active = ?';
         if (newUserData.password) {
           sql += ', hashed_password = ?';
@@ -216,11 +206,7 @@ export default function UserManagementPage() {
         const newUserId = `user-${Date.now()}`;
         await db.execute(
           'INSERT INTO system_users (id, username, full_name, employee_id, hashed_password, is_active) VALUES (?, ?, ?, ?, ?, ?)',
-<<<<<<< HEAD
           [newUserId, newUserData.username, newUserData.full_name, newUserData.employeeId, newUserData.password, Number(newUserData.isActive)] // Plain text password
-=======
-          [newUserId, newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.password, newUserData.isActive ? 1 : 0]
->>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
         );
         for (const roleId of newUserData.roles) {
           await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleId]);
