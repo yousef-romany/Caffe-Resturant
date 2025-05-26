@@ -38,21 +38,20 @@ export const CATEGORY_SLUG_MAP: Record<CategorySlug, { name: Category, icon: Luc
 
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard, requiredPermission: 'view_dashboard' },
+  { label: 'لوحة التحكم', href: '/dashboard', icon: LayoutDashboard }, // Removed requiredPermission
   { label: 'نقطة البيع', href: '/pos', icon: ShoppingCart, requiredPermission: 'manage_pos' },
   { label: 'القائمة', href: '/menu', icon: BookOpenCheck, requiredPermission: 'manage_menu' },
   {
     label: 'شاشة المطبخ',
-    href: '/kitchen-display',
+    href: '/kitchen-display', // Main link for the accordion trigger itself
     icon: ChefHat,
     requiredPermission: 'view_kitchen_screen',
     children: Object.values(CATEGORY_SLUG_MAP).map(catMap => ({
       label: catMap.name,
-      href: '/kitchen-display',
+      href: '/kitchen-display', // All children point to the same page
       icon: catMap.icon,
       slug: catMap.slug,
-      // Individual kitchen category links don't need specific permission here,
-      // as access to the main /kitchen-display and filtering within it handles this.
+      // Individual kitchen category links don't need specific permission here if parent has it
     })),
   },
   { label: 'الطاولات', href: '/tables', icon: TableIcon, requiredPermission: 'manage_tables' },
@@ -60,7 +59,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'المخزون',
     href: '/inventory',
     icon: Package,
-    requiredPermission: 'manage_inventory_view', // General view permission for the section
+    requiredPermission: 'manage_inventory_view',
     children: [
       { label: 'نظرة عامة', href: '/inventory', icon: FileText, requiredPermission: 'manage_inventory_view' },
       { label: 'المكونات', href: '/inventory/ingredients', icon: ShoppingBasket, requiredPermission: 'manage_inventory_edit' },
@@ -71,12 +70,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'الموظفين', href: '/employees', icon: UsersRound, requiredPermission: 'manage_employees_view' },
   {
     label: 'سجل الحضور',
-    href: '/attendance', // Main link to the attendance overview
+    href: '/attendance',
     icon: CalendarClock,
-    requiredPermission: 'view_attendance_report', // Or 'record_attendance_own' if that's more common
+    requiredPermission: 'view_attendance_report', // Or 'record_attendance_own'
     children: [
       { label: 'عرض السجل', href: '/attendance', icon: ListOrdered, requiredPermission: 'view_attendance_report' },
-      { label: 'مسح QR للحضور', href: '/employee-qr-attendance', icon: QrCode, requiredPermission: 'record_attendance_own' }, // Assuming employees can clock themselves in/out
+      { label: 'مسح QR للحضور', href: '/employee-qr-attendance', icon: QrCode, requiredPermission: 'record_attendance_own' },
     ]
   },
   { label: 'العملاء', href: '/customers', icon: Award, requiredPermission: 'manage_customers' },
@@ -86,11 +85,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'التقارير',
     href: '/reports',
     icon: BarChart3,
-    requiredPermission: 'view_reports_sales', // Example: if sales report is the default/most common report
+    requiredPermission: 'view_reports_sales', // General permission for accessing reports section
     children: [
-      { label: 'نظرة عامة', href: '/reports', icon: FileText, requiredPermission: 'view_reports_sales' }, // Or a general view_reports
+      { label: 'نظرة عامة', href: '/reports', icon: FileText, requiredPermission: 'view_reports_sales' },
       { label: 'المبيعات', href: '/reports/sales', icon: TrendingUp, requiredPermission: 'view_reports_sales' },
-      { label: 'المصروفات', href: '/reports/expenses', icon: TrendingDown, requiredPermission: 'view_reports_financial' }, // Grouping with financial
+      { label: 'المصروفات', href: '/reports/expenses', icon: TrendingDown, requiredPermission: 'view_reports_financial' },
       { label: 'ملخص مالي', href: '/reports/financials', icon: Landmark, requiredPermission: 'view_reports_financial' },
       { label: 'ملخص المخزون', href: '/reports/inventory-summary', icon: Archive, requiredPermission: 'manage_inventory_view' },
       { label: 'أوامر الشراء', href: '/reports/purchase-orders-summary', icon: ListChecks, requiredPermission: 'manage_inventory_view' },
@@ -103,7 +102,7 @@ export const SETTINGS_NAV_ITEM: NavItem = {
   label: 'الإعدادات',
   href: '/settings',
   icon: Settings,
-  requiredPermission: 'manage_app_settings', // General permission to access settings area
+  requiredPermission: 'manage_app_settings', // Base permission to see "Settings"
   children: [
     { label: 'إعدادات عامة', href: '/settings', icon: Settings, requiredPermission: 'manage_app_settings' },
     { label: 'إدارة المستخدمين', href: '/settings/users', icon: UserCog, requiredPermission: 'manage_system_users' },
@@ -123,13 +122,13 @@ export interface Ingredient {
   costPerUnit: number;
   lowStockThreshold?: number;
   supplierId?: string;
-  supplierName?: string;
+  supplierName?: string; // Denormalized for display convenience
 }
 
 
 export interface MenuItemIngredient {
   ingredientId: string;
-  ingredientName?: string;
+  ingredientName?: string; // For display in forms
   quantity: number;
   unit: IngredientUnit;
 }
@@ -154,7 +153,7 @@ export type OrderType = "صالة" | "سفري" | "توصيل";
 export interface OrderItem extends MenuItem {
   quantity: number;
   notes?: string;
-  category: Category;
+  category: Category; // Ensure category is part of OrderItem for kitchen display filtering
 }
 export interface Order {
   id: string;
@@ -170,7 +169,7 @@ export interface Order {
   type: OrderType;
   customerName?: string;
   tableNumber?: string;
-  tableId?: string;
+  tableId?: string; // To link directly to tables_info
   deliveryAddress?: string;
   captainName?: string;
   notes?: string;
@@ -181,7 +180,7 @@ export interface Order {
   kitchen_ready_at?: Date;
 }
 
-export const DEFAULT_VAT_PERCENTAGE = 15; // Updated to 15 as per example
+export const DEFAULT_VAT_PERCENTAGE = 15;
 
 
 export type TableStatus = "متاحة" | "مشغولة" | "محجوزة" | "تحتاج تنظيف";
@@ -191,7 +190,7 @@ export interface Table {
   number: string;
   status: TableStatus;
   capacity: number;
-  orderId?: string;
+  orderId?: string; // current_order_id from DB
 }
 
 export const TABLE_STATUSES: TableStatus[] = ["متاحة", "مشغولة", "محجوزة", "تحتاج تنظيف"];
@@ -213,15 +212,15 @@ export interface PurchaseOrderItem {
   ingredientId: string;
   ingredientName: string;
   quantity: number;
-  costPerUnit: number;
-  unit: IngredientUnit;
+  costPerUnit: number; // cost_per_unit_at_purchase from DB
+  unit: IngredientUnit; // unit_at_purchase from DB
 }
 
 export interface PurchaseOrder {
   id: string;
   orderNumber: string;
   supplierId: string;
-  supplierName: string;
+  supplierName: string; // Denormalized from DB
   items: PurchaseOrderItem[];
   totalAmount: number;
   status: PurchaseOrderStatus;
@@ -266,24 +265,24 @@ export interface Customer {
 
 export interface Review {
   id: string;
-  customerName: string;
+  customerName: string; // From DB: customer_name
   rating: number;
   comment?: string;
-  reviewDate: Date;
-  orderId?: string;
-  menuItemName?: string;
-  is_public?: boolean;
+  reviewDate: Date; // From DB: review_date
+  orderId?: string; // From DB: order_id
+  menuItemName?: string; // From DB: menu_item_name
+  is_public?: boolean; // From DB: is_public
 }
 
 
 export interface AttendanceRecord {
   id: string;
-  employeeId: string;
-  employeeName?: string;
-  clockInTime: Date;
-  clockOutTime?: Date;
-  attendanceDate: Date;
-  workDurationHours?: number;
+  employeeId: string; // From DB: employee_id
+  employeeName?: string; // To be fetched/joined
+  clockInTime: Date; // From DB: clock_in_time
+  clockOutTime?: Date; // From DB: clock_out_time
+  attendanceDate: Date; // From DB: attendance_date
+  workDurationHours?: number; // From DB: work_duration_hours
   notes?: string;
 }
 
@@ -291,11 +290,11 @@ export interface AttendanceRecord {
 export interface SystemUser {
   id: string;
   username: string;
-  hashedPassword?: string;
-  employeeId?: string;
-  full_name?: string;
-  roles: string[]; 
-  isActive: boolean;
+  hashedPassword?: string; // Not typically sent to client
+  employeeId?: string;    // From DB: employee_id
+  fullName?: string;      // From DB: full_name (alias as fullName in JS)
+  roles: string[];        // Array of role IDs
+  isActive: boolean;      // From DB: is_active
 }
 
 export interface Role {
@@ -305,20 +304,38 @@ export interface Role {
   permissions: string[]; // Array of permission names/IDs
 }
 
+export interface Permission { // Added for clarity, matches structure in users page
+  id: string;
+  name: string;
+  group_name?: string;
+  description?: string;
+}
+
 // This list should ideally match the 'name' column in your 'permissions' SQL table.
+// Used in UserManagementPage for displaying all available permissions.
 export const DUMMY_PERMISSIONS_LIST: string[] = [
   'view_dashboard', 'manage_pos', 'manage_menu', 'view_kitchen_screen', 'manage_tables',
   'manage_inventory_view', 'manage_inventory_edit', 'manage_employees_view', 'manage_employees_edit',
   'record_attendance_own', 'record_attendance_others', 'view_attendance_report',
   'manage_customers', 'view_reviews', 'view_orders_history',
-  'view_reports_sales', 'view_reports_financial', // Simplified report permissions
+  'view_reports_sales', 'view_reports_financial',
   'manage_app_settings', 'manage_system_users'
 ];
 
-export let DUMMY_EMPLOYEES: Employee[] = [
-  { id: 'emp1', name: 'أحمد خالد', role: 'مدير', phone: '0501112233', email: 'ahmad.k@example.com', salary: 7000, hireDate: new Date('2023-01-15'), is_active: true, shift: 'صباحي' },
-  { id: 'emp2', name: 'سارة علي', role: 'شيف', phone: '0502223344', salary: 6000, hireDate: new Date('2023-03-01'), is_active: true, shift: 'مسائي' },
-  { id: 'emp3', name: 'محمد عبدالله', role: 'كاشير', phone: '0503334455', email: 'mohamed.a@example.com', salary: 4500, hireDate: new Date('2023-05-20'), is_active: true, shift: 'صباحي' },
-  { id: 'emp4', name: 'فاطمة حسين', role: 'مقدم طعام', phone: '0504445566', salary: 4000, hireDate: new Date('2023-06-10'), is_active: true, shift: 'مسائي' },
-  { id: 'emp5', name: 'علي الغامدي (سابق)', role: 'مقدم طعام', phone: '0505556677', salary: 3800, hireDate: new Date('2022-01-10'), is_active: false, shift: 'متغير' },
-];
+
+// DUMMY DATA - Should be phased out as DB integration completes
+// ... (Keep other DUMMY_DATA arrays if still used by parts of the app not yet fully DB-integrated)
+export const DUMMY_CUSTOMERS: Customer[] = []; // Assume these are fetched from DB
+export const DUMMY_ORDERS: Order[] = []; // Assume these are fetched from DB
+export const DUMMY_MENU_ITEMS: MenuItem[] = []; // Assume these are fetched from DB
+export const DUMMY_TABLES: Table[] = []; // Assume these are fetched from DB
+export const DUMMY_EMPLOYEES: Employee[] = []; // Assume these are fetched from DB
+export const DUMMY_ATTENDANCE_RECORDS: AttendanceRecord[] = []; // Assume these are fetched from DB
+export const DUMMY_REVIEWS: Review[] = []; // Assume these are fetched from DB
+export const DUMMY_INGREDIENTS: Ingredient[] = []; // Assume these are fetched from DB
+export const DUMMY_PURCHASE_ORDERS: PurchaseOrder[] = []; // Assume these are fetched from DB
+export const DUMMY_SUPPLIERS: Supplier[] = []; // Assume these are fetched from DB
+export const DUMMY_SYSTEM_USERS: SystemUser[] = []; // Assume these are fetched from DB
+export const DUMMY_ROLES: Role[] = []; // Assume these are fetched from DB
+// End DUMMY DATA
+```
