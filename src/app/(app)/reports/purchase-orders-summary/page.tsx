@@ -52,7 +52,7 @@ export default function PurchaseOrdersSummaryReportPage() {
     setIsClient(true);
     async function initDb() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
       } catch (error) {
         console.error("Failed to initialize DB for PO summary report:", error);

@@ -33,7 +33,7 @@ export default function WebsiteLandingPage() {
     async function initializeAndLoadData() {
       setIsLoading(true);
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
         if (!dbInstance) {
           toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });

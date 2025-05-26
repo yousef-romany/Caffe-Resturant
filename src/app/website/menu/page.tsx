@@ -44,7 +44,7 @@ export default function CustomerMenuPage() {
   useEffect(() => {
     async function initializeDbAndLoadMenu() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
         if (dbInstance) {
           await fetchMenuItems(dbInstance);

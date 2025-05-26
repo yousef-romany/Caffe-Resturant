@@ -10,13 +10,12 @@ import { Label } from "@/components/ui/label";
 import { LogIn, AlertTriangle } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { getDb } from '@/lib/db';
-import type { Database } from '@tauri-apps/plugin-sql';
-import type { SystemUser, Role } from '@/constants'; 
+import type { SystemUser, Role } from '@/constants'; // Assuming these types are defined
 
 interface UserSessionData {
   userId: string;
   username: string;
-  fullName?: string;
+  full_name?: string;
   roleNames: string[];
   permissionNames: string[];
 }
@@ -46,7 +45,7 @@ export default function LoginPage() {
     }
 
     try {
-      const db = await getDb();
+      const db = await getDb;
       if (!db) {
         setError("فشل الاتصال بقاعدة البيانات. يرجى المحاولة مرة أخرى لاحقًا.");
         toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
@@ -54,6 +53,9 @@ export default function LoginPage() {
         return;
       }
 
+      // Simulate login: Check if username exists and is active
+      // IMPORTANT: In a real app, you MUST hash and verify passwords securely.
+      // This is a placeholder and highly insecure for password handling.
       const users: SystemUser[] = await db.select("SELECT id, username, full_name, is_active FROM system_users WHERE username = ?", [username]);
 
       if (users.length === 0) {
@@ -71,6 +73,7 @@ export default function LoginPage() {
         return;
       }
 
+      // Fetch user roles
       const userRolesRaw: { role_id: string }[] = await db.select("SELECT role_id FROM user_roles WHERE user_id = ?", [user.id]);
       const roleIds = userRolesRaw.map(ur => ur.role_id);
       
@@ -95,7 +98,7 @@ export default function LoginPage() {
       const sessionData: UserSessionData = {
         userId: user.id,
         username: user.username,
-        fullName: user.fullName,
+        full_name: user.full_name,
         roleNames: roleNames,
         permissionNames: permissionNames,
       };
@@ -103,7 +106,7 @@ export default function LoginPage() {
 
       toast({
         title: "تم تسجيل الدخول بنجاح!",
-        description: `مرحباً بك، ${user.fullName || user.username}!`,
+        description: `مرحباً بك، ${user.full_name || user.username}!`,
         className: "bg-green-500 text-white",
       });
       router.push('/dashboard');

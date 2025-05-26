@@ -293,8 +293,8 @@ export interface SystemUser {
   username: string;
   hashedPassword?: string;
   employeeId?: string;
-  fullName?: string;
-  roles: string[]; // Array of role IDs
+  full_name?: string;
+  roles: string[]; 
   isActive: boolean;
 }
 

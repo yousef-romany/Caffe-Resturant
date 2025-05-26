@@ -29,7 +29,7 @@ export default function AttendancePage() {
   useEffect(() => {
     async function initializeAndFetchData() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
         if (!dbInstance) {
           toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });

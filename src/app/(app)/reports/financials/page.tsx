@@ -50,7 +50,7 @@ export default function FinancialsReportPage() {
     setIsClient(true);
     async function initDb() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
       } catch (error) {
         console.error("Failed to initialize DB for financials report:", error);

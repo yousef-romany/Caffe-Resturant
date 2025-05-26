@@ -23,7 +23,7 @@ import type { Database } from '@tauri-apps/plugin-sql';
 
 const initialNewUserState: Omit<SystemUser, 'id' | 'hashedPassword'> & { password?: string } = {
   username: '',
-  fullName: '',
+  full_name: '',
   employeeId: undefined,
   roles: [],
   isActive: true,
@@ -58,7 +58,7 @@ export default function UserManagementPage() {
   useEffect(() => {
     async function loadDbAndData() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         if (!dbInstance) {
           toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive"});
           setIsLoading(false);
@@ -138,7 +138,11 @@ export default function UserManagementPage() {
   const handleUserActiveChangeSwitch = async (userId: string, isActive: boolean) => {
     if (!db) return;
     try {
+<<<<<<< HEAD
+      await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [Number(isActive), userId]);
+=======
       await db.execute('UPDATE system_users SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, userId]);
+>>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
       setSystemUsers(prevUsers =>
         prevUsers.map(u =>
         u.id === userId ? { ...u, isActive: isActive } : u
@@ -165,7 +169,7 @@ export default function UserManagementPage() {
     setEditingUser(user);
     setNewUserData({ 
       username: user.username,
-      fullName: user.fullName,
+      full_name: user.full_name,
       employeeId: user.employeeId,
       roles: user.roles || [], 
       isActive: user.isActive,
@@ -187,7 +191,12 @@ export default function UserManagementPage() {
 
     try {
       if (editingUser) {
+<<<<<<< HEAD
+        // Update existing user
+        const updateFields: any[] = [newUserData.username, newUserData.full_name, newUserData.employeeId, Number(newUserData.isActive)];
+=======
         const updateFields: any[] = [newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.isActive ? 1 : 0];
+>>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
         let sql = 'UPDATE system_users SET username = ?, full_name = ?, employee_id = ?, is_active = ?';
         if (newUserData.password) {
           sql += ', hashed_password = ?';
@@ -207,7 +216,11 @@ export default function UserManagementPage() {
         const newUserId = `user-${Date.now()}`;
         await db.execute(
           'INSERT INTO system_users (id, username, full_name, employee_id, hashed_password, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+<<<<<<< HEAD
+          [newUserId, newUserData.username, newUserData.full_name, newUserData.employeeId, newUserData.password, Number(newUserData.isActive)] // Plain text password
+=======
           [newUserId, newUserData.username, newUserData.fullName, newUserData.employeeId, newUserData.password, newUserData.isActive ? 1 : 0]
+>>>>>>> 2343b1e9ea3354f95d34b02aef35b24185a4914b
         );
         for (const roleId of newUserData.roles) {
           await db.execute('INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)', [newUserId, roleId]);
@@ -371,9 +384,9 @@ export default function UserManagementPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>اسم المستخدم</TableHead>
-                  <TableHead>الاسم الكامل</TableHead>
-                  <TableHead>الأدوار</TableHead>
+                  <TableHead className='text-center'>اسم المستخدم</TableHead>
+                  <TableHead className='text-center'>الاسم الكامل</TableHead>
+                  <TableHead className='text-center'>الأدوار</TableHead>
                   <TableHead className="text-center">نشط</TableHead>
                   <TableHead className="text-center">الإجراءات</TableHead>
                 </TableRow>
@@ -382,8 +395,8 @@ export default function UserManagementPage() {
                 {systemUsers.length > 0 ? (
                   systemUsers.map(user => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.username}</TableCell>
-                      <TableCell>{user.fullName || '-'}</TableCell>
+                      <TableCell className="font-medium text-center">{user.username}</TableCell>
+                      <TableCell className="text-center">{user.full_name || '-'}</TableCell>
                       <TableCell>
                         {(user.roles || []).map(roleId => (
                           <Badge key={roleId} variant="secondary" className="me-1 my-0.5 whitespace-nowrap">
@@ -484,8 +497,8 @@ export default function UserManagementPage() {
                 <Input id="username" name="username" value={newUserData.username} onChange={handleUserInputChange} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="fullName">الاسم الكامل</Label>
-                <Input id="fullName" name="fullName" value={newUserData.fullName || ''} onChange={handleUserInputChange} />
+                <Label htmlFor="full_name">الاسم الكامل</Label>
+                <Input id="full_name" name="full_name" value={newUserData.full_name || ''} onChange={handleUserInputChange} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">{editingUser ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور'}</Label>

@@ -71,7 +71,7 @@ export default function CustomerRegisterPage() {
 
 
     try {
-      const db = await getDb();
+      const db = await getDb;
       if (!db) {
         toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
         setIsLoading(false);

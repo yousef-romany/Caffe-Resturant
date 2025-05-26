@@ -53,7 +53,7 @@ export default function SuppliersPage() {
   useEffect(() => {
     async function loadDbAndFetchData() {
       try {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         if (!dbInstance) {
           toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
           setIsLoading(false);

@@ -37,7 +37,7 @@ export default function EmployeeQrAttendancePage() {
 
   useEffect(() => {
     async function initDb() {
-        const dbInstance = await getDb();
+        const dbInstance = await getDb;
         setDbInstance(dbInstance);
         if (!dbInstance) {
             toast({ title: "خطأ فادح", description: "فشل الاتصال بقاعدة البيانات.", variant: "destructive" });
