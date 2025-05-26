@@ -39,7 +39,7 @@ const initialNewCustomerState: Omit<Customer, 'id' | 'joinDate' | 'totalSpent'> 
   phone: '',
   email: '',
   loyaltyPoints: 0,
-  joinDate: new Date().toISOString().split('T')[0], // Default to today
+  joinDate: new Date().toISOString().split('T')[0], 
   notes: '',
 };
 
@@ -109,7 +109,6 @@ export default function CustomersPage() {
       toast({ title: "خطأ", description: "الاسم، الهاتف، وتاريخ الانضمام مطلوبون.", variant: "destructive" });
       return;
     }
-    // Basic phone validation (e.g., starts with 05 and is 10 digits long for SA numbers)
     if (!/^05\d{8}$/.test(newCustomerData.phone)) {
         toast({
             title: "خطأ في رقم الهاتف",
@@ -127,27 +126,26 @@ export default function CustomersPage() {
         return;
     }
 
-
     const customerDataToSave = {
       name: newCustomerData.name,
       phone: newCustomerData.phone,
       email: newCustomerData.email || null,
       loyalty_points: Number(newCustomerData.loyaltyPoints) || 0,
-      join_date: format(new Date(newCustomerData.joinDate), 'yyyy-MM-dd'), // Format date for DB
+      join_date: format(new Date(newCustomerData.joinDate), 'yyyy-MM-dd'), 
       notes: newCustomerData.notes || null,
     };
 
     try {
       if (editingCustomer) {
         await db.execute(
-          'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4, join_date = $5, notes = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7',
+          'UPDATE customers SET name = ?, phone = ?, email = ?, loyalty_points = ?, join_date = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyalty_points, customerDataToSave.join_date, customerDataToSave.notes, editingCustomer.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات العميل ${customerDataToSave.name}.` });
       } else {
         const newCustomerId = `cust-${Date.now()}`;
         await db.execute(
-          'INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, notes, total_spent) VALUES ($1, $2, $3, $4, $5, $6, $7, 0)',
+          'INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, notes, total_spent) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
           [newCustomerId, customerDataToSave.name, customerDataToSave.phone, customerDataToSave.email, customerDataToSave.loyalty_points, customerDataToSave.join_date, customerDataToSave.notes]
         );
         toast({ title: "نجاح", description: `تمت إضافة العميل ${customerDataToSave.name}.` });
@@ -155,7 +153,7 @@ export default function CustomersPage() {
       setIsDialogOpen(false);
       setEditingCustomer(null);
       setNewCustomerData(initialNewCustomerState);
-      await fetchCustomers(db);
+      if (db) await fetchCustomers(db);
     } catch (error) {
       console.error("Error submitting customer:", error);
       toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات العميل. قد يكون رقم الهاتف أو البريد مكرر.", variant: "destructive" });
@@ -179,10 +177,9 @@ export default function CustomersPage() {
       return;
     }
     try {
-      // Consider checking for related orders before deleting
-      await db.execute('DELETE FROM customers WHERE id = $1', [customerToDelete.id]);
+      await db.execute('DELETE FROM customers WHERE id = ?', [customerToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف العميل ${customerToDelete.name}.`, variant: "destructive" });
-      await fetchCustomers(db);
+      if (db) await fetchCustomers(db);
     } catch (error: any) {
       console.error("Error deleting customer:", error);
       if (error.message && error.message.toLowerCase().includes("foreign key constraint fails")) {
@@ -251,7 +248,7 @@ export default function CustomersPage() {
                       <TableCell>{customer.email || '-'}</TableCell>
                       <TableCell className="text-center">{customer.loyaltyPoints}</TableCell>
                       <TableCell className="text-center">${(customer.totalSpent || 0).toFixed(2)}</TableCell>
-                      <TableCell>{format(new Date(customer.joinDate), 'PP', { locale: arSA })}</TableCell>
+                      <TableCell>{isValid(new Date(customer.joinDate)) ? format(new Date(customer.joinDate), 'PP', { locale: arSA }) : '-'}</TableCell>
                       <TableCell className="text-center space-x-2 space-x-reverse">
                         <Button variant="ghost" size="icon" onClick={() => handleEditCustomer(customer)}>
                           <Edit className="h-4 w-4" />
@@ -322,6 +319,5 @@ export default function CustomersPage() {
     </>
   );
 }
-    
 
     

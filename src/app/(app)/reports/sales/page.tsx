@@ -96,7 +96,6 @@ export default function SalesReportPage() {
       const endDateString = format(endDate, 'yyyy-MM-dd HH:mm:ss');
 
       try {
-        // Fetch summary stats
         const summaryResult: any[] = await db.select(
           "SELECT SUM(total_amount) as totalRevenue, COUNT(*) as totalOrders FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
           [startDateString, endDateString]
@@ -107,7 +106,6 @@ export default function SalesReportPage() {
         setTotalOrders(ordersCount);
         setAverageOrderValue(ordersCount > 0 ? revenue / ordersCount : 0);
 
-        // Fetch category sales
         const catSalesResult: any[] = await db.select(
           `SELECT mi.category, SUM(oi.price_at_order * oi.quantity) as value
            FROM orders o
@@ -120,7 +118,6 @@ export default function SalesReportPage() {
         );
         setCategorySales(catSalesResult.map(r => ({ name: r.category as Category, value: Number(r.value) })));
         
-        // Fetch order type sales
         const otSalesResult: any[] = await db.select(
           `SELECT type, SUM(total_amount) as value
            FROM orders
@@ -131,7 +128,6 @@ export default function SalesReportPage() {
         );
         setOrderTypeSales(otSalesResult.map(r => ({ name: r.type as OrderType, value: Number(r.value) })));
 
-        // Fetch monthly sales for the last 6 months (always last 6 months for this chart)
         const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
         const currentMonthDate = new Date();
         const salesChartDataPromises: Promise<MonthlySalesData>[] = Array(6).fill(null).map(async (_, i) => {

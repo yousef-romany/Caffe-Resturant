@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
-import { type Order as AppOrder, type OrderStatus, type OrderType, type OrderItem as AppOrderItem } from '@/constants';
+import { type Order as AppOrder, type OrderStatus, type OrderType, type OrderItem as AppOrderItem, type Category } from '@/constants'; // Added Category
 import {
   Table,
   TableBody,
@@ -59,7 +59,7 @@ interface FetchedOrder {
 
 interface DetailedOrderItem extends AppOrderItem {
   // Inherits from AppOrderItem, can add more DB specific fields if needed
-  // menu_item_name, quantity, price_at_order, notes, image_url, data_ai_hint are expected
+  category: Category; // Explicitly add category here
 }
 
 
@@ -152,11 +152,11 @@ export default function OrdersPage() {
           mi.category
          FROM order_items oi
          LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-         WHERE oi.order_id = $1`,
+         WHERE oi.order_id = ?`,
         [order.id]
       );
       setDetailedOrderItems(items.map(item => ({
-        id: item.menu_item_id, // Use menu_item_id as the core ID for the item
+        id: item.menu_item_id, 
         name: item.name,
         category: item.category as Category,
         price: Number(item.price) || 0,
@@ -335,7 +335,7 @@ export default function OrdersPage() {
                 <p className="text-center text-muted-foreground py-4">جارٍ تحميل عناصر الطلب...</p>
               ) : detailedOrderItems.length > 0 ? (
                 <ul className="space-y-2">
-                  {detailedOrderItems.map((item: DetailedOrderItem, index: number) => ( // Added type for item
+                  {detailedOrderItems.map((item: DetailedOrderItem, index: number) => ( 
                     <li key={`${item.id}-${index}`} className="flex items-start gap-3 p-2 border rounded-md">
                       <NextImage 
                         src={item.imageUrl || 'https://placehold.co/50x50.png'} 

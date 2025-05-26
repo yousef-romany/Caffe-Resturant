@@ -118,14 +118,14 @@ export default function SuppliersPage() {
     try {
       if (editingSupplier) {
         await db.execute(
-          'UPDATE suppliers SET name = $1, contact_person = $2, phone = $3, email = $4, address = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6',
+          'UPDATE suppliers SET name = ?, contact_person = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [supplierDataToSave.name, supplierDataToSave.contact_person, supplierDataToSave.phone, supplierDataToSave.email, supplierDataToSave.address, editingSupplier.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات المورد ${supplierDataToSave.name}.` });
       } else {
         const newSupplierId = `sup-${Date.now()}`;
         await db.execute(
-          'INSERT INTO suppliers (id, name, contact_person, phone, email, address) VALUES ($1, $2, $3, $4, $5, $6)',
+          'INSERT INTO suppliers (id, name, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?)',
           [newSupplierId, supplierDataToSave.name, supplierDataToSave.contact_person, supplierDataToSave.phone, supplierDataToSave.email, supplierDataToSave.address]
         );
         toast({ title: "نجاح", description: `تمت إضافة المورد ${supplierDataToSave.name}.` });
@@ -133,10 +133,10 @@ export default function SuppliersPage() {
       setIsDialogOpen(false);
       setEditingSupplier(null);
       setNewSupplierData(initialNewSupplierState);
-      await fetchSuppliers(db);
+      if (db) await fetchSuppliers(db);
     } catch (error) {
       console.error("Error submitting supplier:", error);
-      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات المورد.", variant: "destructive" });
+      toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات المورد. قد يكون الاسم مكرر.", variant: "destructive" });
     }
   };
 
@@ -158,9 +158,9 @@ export default function SuppliersPage() {
       return;
     }
     try {
-      await db.execute('DELETE FROM suppliers WHERE id = $1', [supplierToDelete.id]);
+      await db.execute('DELETE FROM suppliers WHERE id = ?', [supplierToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف المورد ${supplierToDelete.name}.`, variant: "destructive" });
-      await fetchSuppliers(db);
+      if (db) await fetchSuppliers(db);
     } catch (error: any) {
       console.error("Error deleting supplier:", error);
       if (error.message && (error.message.toLowerCase().includes("constraint failed") || error.message.toLowerCase().includes("foreign key constraint fails"))) {
@@ -292,6 +292,5 @@ export default function SuppliersPage() {
     </>
   );
 }
-    
 
     

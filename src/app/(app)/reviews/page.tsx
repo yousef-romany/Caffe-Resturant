@@ -51,8 +51,6 @@ export default function ReviewsPage() {
     if (!currentDb) return;
     setIsLoading(true);
     try {
-      // Fetch reviews and related data (e.g., customer name if review is linked to customer_id)
-      // For now, we'll fetch as per the 'reviews' table structure.
       const fetchedReviews: any[] = await currentDb.select(
         'SELECT id, customer_name as customerName, rating, comment, review_date as reviewDate, order_id as orderId, menu_item_name as menuItemName, is_public FROM reviews ORDER BY review_date DESC'
       );

@@ -33,7 +33,7 @@ export default function SupplierDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [db, setDbInstance] = useState<Database | null>(null);
-  const [supplierIdState, setSupplierIdState] = useState<string | null>(null); // Renamed to avoid conflict with possible future prop
+  const [supplierIdState, setSupplierIdState] = useState<string | null>(null); 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
@@ -78,7 +78,7 @@ export default function SupplierDetailPage() {
         setIsLoading(true);
         try {
           const foundSupplierResult: Supplier[] = await db.select(
-            'SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers WHERE id = $1', 
+            'SELECT id, name, contact_person as contactPerson, phone, email, address FROM suppliers WHERE id = ?', 
             [supplierIdState]
           );
           
@@ -92,14 +92,14 @@ export default function SupplierDetailPage() {
             });
 
             const supplierPOsResult: any[] = await db.select(
-              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, order_date as orderDate, supplier_name as supplierName FROM purchase_orders WHERE supplier_id = $1 ORDER BY order_date DESC',
+              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, order_date as orderDate, supplier_name as supplierName FROM purchase_orders WHERE supplier_id = ? ORDER BY order_date DESC',
               [supplierIdState]
             );
             setPurchaseOrders(supplierPOsResult.map(po => ({
               ...po,
               orderDate: po.orderDate ? parseISO(po.orderDate) : new Date(),
               totalAmount: Number(po.totalAmount) || 0,
-              items: [] // Items are not fetched here for simplicity
+              items: [] 
             })));
 
           } else {
@@ -114,14 +114,14 @@ export default function SupplierDetailPage() {
           setPurchaseOrders([]);
         } finally {
           setIsLoading(false);
-          localStorage.removeItem('selectedSupplierId'); // Clear after fetching
+          localStorage.removeItem('selectedSupplierId'); 
         }
-      } else if (!supplierIdState && !isLoading) { // Ensure isLoading is false if no supplierIdState
+      } else if (!supplierIdState && !isLoading) { 
         setIsLoading(false);
       }
     }
     fetchSupplierAndPOs();
-  }, [db, supplierIdState, toast]); // Removed isLoading from dependency array to prevent re-fetch loops
+  }, [db, supplierIdState, toast]); 
 
 
   const availableYears = useMemo(() => {
@@ -286,6 +286,5 @@ export default function SupplierDetailPage() {
     </>
   );
 }
-    
 
     

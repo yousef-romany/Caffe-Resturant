@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -66,7 +65,7 @@ export default function DashboardPage() {
           return;
         }
         setDbInstance(dbInstance);
-        fetchDashboardData(dbInstance);
+        await fetchDashboardData(dbInstance); 
       } catch (error) {
         console.error("Failed to initialize DB or fetch data:", error);
         toast({ title: "خطأ في التحميل", description: "فشل تحميل بيانات لوحة التحكم.", variant: "destructive" });
@@ -83,34 +82,27 @@ export default function DashboardPage() {
       const todayStart = format(startOfDay(new Date()), 'yyyy-MM-dd HH:mm:ss');
       const todayEnd = format(endOfDay(new Date()), 'yyyy-MM-dd HH:mm:ss');
 
-      // Total Revenue All Time (completed orders)
       const revenueAllResult: any[] = await currentDb.select("SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل'");
       const totalRevenueAllTime = Number(revenueAllResult[0]?.total) || 0;
 
-      // Total Revenue Today (completed orders)
       const revenueTodayResult: any[] = await currentDb.select(
         "SELECT SUM(total_amount) as total FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
         [todayStart, todayEnd]
       );
       const totalRevenueToday = Number(revenueTodayResult[0]?.total) || 0;
       
-      // Total Orders Today (completed orders)
       const ordersTodayResult: any[] = await currentDb.select(
         "SELECT COUNT(*) as count FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
         [todayStart, todayEnd]
       );
       const totalOrdersToday = Number(ordersTodayResult[0]?.count) || 0;
 
-
-      // Active Orders Count
       const activeOrdersResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM orders WHERE status IN ('قيد الانتظار', 'قيد التجهيز')");
       const activeOrdersCount = Number(activeOrdersResult[0]?.count) || 0;
 
-      // Total Active Employees
       const employeesResult: any[] = await currentDb.select("SELECT COUNT(*) as count FROM employees WHERE is_active = TRUE");
       const totalEmployees = Number(employeesResult[0]?.count) || 0;
       
-      // Total cost of purchase orders received TODAY
       const purchaseCostsTodayResult: any[] = await currentDb.select(
           "SELECT SUM(total_amount) as totalPurchaseCosts FROM purchase_orders WHERE status = 'مستلم' AND received_date BETWEEN ? AND ?",
           [format(startOfDay(new Date()), 'yyyy-MM-dd'), format(endOfDay(new Date()), 'yyyy-MM-dd')]
@@ -121,7 +113,6 @@ export default function DashboardPage() {
       
       setStats({ totalRevenueAllTime, totalRevenueToday, activeOrdersCount, totalOrdersToday, totalEmployees, estimatedOperationalBalanceToday });
 
-      // Top Selling Items (by revenue from completed orders - all time for now, can be filtered by period)
       const topItemsResult: any[] = await currentDb.select(`
         SELECT 
           mi.id, 
@@ -138,7 +129,6 @@ export default function DashboardPage() {
       `);
       setTopSellingItems(topItemsResult.map(item => ({...item, totalRevenue: Number(item.totalRevenue), quantitySold: Number(item.quantitySold) })));
 
-      // Recent Orders (last 5, all statuses)
       const recentOrdersResult: any[] = await currentDb.select(`
         SELECT o.id, o.order_number as orderNumber, o.type, o.total_amount as totalAmount, o.status, o.created_at as createdAt, ti.number as tableNumber
         FROM orders o
@@ -266,7 +256,7 @@ export default function DashboardPage() {
                       order.status === 'قيد الانتظار' ? 'bg-yellow-100 text-yellow-700' :
                       order.status === 'قيد التجهيز' ? 'bg-blue-100 text-blue-700' :
                        order.status === 'جاهز' ? 'bg-sky-100 text-sky-700' : 
-                      'bg-red-100 text-red-700' // For 'ملغى'
+                      'bg-red-100 text-red-700' 
                     }`}>{order.status}</span>
                 </div>
               </div>
@@ -300,5 +290,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    

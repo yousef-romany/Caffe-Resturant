@@ -48,7 +48,7 @@ const initialNewEmployeeState: Omit<Employee, 'id' | 'hireDate'> & { hireDate: s
   salary: undefined,
   hireDate: new Date().toISOString().split('T')[0], 
   is_active: true,
-  shift: EMPLOYEE_SHIFTS[0], // Default shift
+  shift: EMPLOYEE_SHIFTS[0],
 };
 
 export default function EmployeesPage() {
@@ -91,7 +91,7 @@ export default function EmployeesPage() {
         hireDate: emp.hireDate && isValid(parseISO(emp.hireDate)) ? parseISO(emp.hireDate) : new Date(), 
         salary: emp.salary !== null && emp.salary !== undefined ? Number(emp.salary) : undefined,
         is_active: Boolean(emp.is_active),
-        shift: emp.shift as EmployeeShift || EMPLOYEE_SHIFTS[0], // Ensure shift has a default
+        shift: emp.shift as EmployeeShift || EMPLOYEE_SHIFTS[0], 
       })));
     } catch (error) {
       console.error("Error fetching employees:", error);
@@ -137,21 +137,21 @@ export default function EmployeesPage() {
       email: newEmployeeData.email || null, 
       salary: newEmployeeData.salary ? Number(newEmployeeData.salary) : null,
       hire_date: format(new Date(newEmployeeData.hireDate), 'yyyy-MM-dd'),
-      is_active: newEmployeeData.is_active === undefined ? true : newEmployeeData.is_active,
+      is_active: newEmployeeData.is_active === undefined ? 1 : (newEmployeeData.is_active ? 1 : 0),
       shift: newEmployeeData.shift,
     };
 
     try {
       if (editingEmployee) {
         await db.execute(
-          'UPDATE employees SET name = $1, role = $2, phone = $3, email = $4, salary = $5, hire_date = $6, is_active = $7, shift = $8, updated_at = CURRENT_TIMESTAMP WHERE id = $9',
+          'UPDATE employees SET name = ?, role = ?, phone = ?, email = ?, salary = ?, hire_date = ?, is_active = ?, shift = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
           [employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, employeeDataToSave.shift, editingEmployee.id]
         );
         toast({ title: "نجاح", description: `تم تحديث بيانات ${employeeDataToSave.name}.` });
       } else {
         const newEmployeeId = `emp-${Date.now()}`;
         await db.execute(
-          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active, shift) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          'INSERT INTO employees (id, name, role, phone, email, salary, hire_date, is_active, shift) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [newEmployeeId, employeeDataToSave.name, employeeDataToSave.role, employeeDataToSave.phone, employeeDataToSave.email, employeeDataToSave.salary, employeeDataToSave.hire_date, employeeDataToSave.is_active, employeeDataToSave.shift]
         );
         toast({ title: "نجاح", description: `تمت إضافة الموظف ${employeeDataToSave.name}.` });
@@ -159,7 +159,7 @@ export default function EmployeesPage() {
       setIsDialogOpen(false);
       setEditingEmployee(null);
       setNewEmployeeData(initialNewEmployeeState);
-      await fetchEmployees(db); 
+      if (db) await fetchEmployees(db); 
     } catch (error) {
       console.error("Error submitting employee:", error);
       toast({ title: "خطأ في الحفظ", description: "فشل حفظ بيانات الموظف. تأكد أن رقم الهاتف والبريد الإلكتروني (إن وجد) غير مكررين.", variant: "destructive" });
@@ -185,10 +185,9 @@ export default function EmployeesPage() {
       return;
     }
     try {
-      // Consider checking if employee is linked to critical data (e.g., system_users) before deleting
-      await db.execute('DELETE FROM employees WHERE id = $1', [employeeToDelete.id]);
+      await db.execute('DELETE FROM employees WHERE id = ?', [employeeToDelete.id]);
       toast({ title: "نجاح", description: `تم حذف ${employeeToDelete.name}.`, variant: "destructive" });
-      await fetchEmployees(db); 
+      if (db) await fetchEmployees(db); 
     } catch (error: any) {
       console.error("Error deleting employee:", error);
       if (error.message && (error.message.toLowerCase().includes("foreign key constraint") || error.message.toLowerCase().includes("constraint failed"))) {
@@ -247,7 +246,7 @@ export default function EmployeesPage() {
                       <TableCell>{employee.phone}</TableCell>
                       <TableCell>{employee.email || '-'}</TableCell>
                       <TableCell className="text-center">{employee.salary ? `$${employee.salary.toFixed(2)}` : '-'}</TableCell>
-                      <TableCell>{format(new Date(employee.hireDate), 'PP', { locale: arSA })}</TableCell>
+                      <TableCell>{isValid(new Date(employee.hireDate)) ? format(new Date(employee.hireDate), 'PP', { locale: arSA }) : '-'}</TableCell>
                        <TableCell className="text-center">
                         {employee.is_active ? <Badge variant="default">نعم</Badge> : <Badge variant="destructive">لا</Badge>}
                       </TableCell>
@@ -353,6 +352,5 @@ export default function EmployeesPage() {
     </>
   );
 }
-    
 
     

@@ -23,10 +23,9 @@ import {
 import { getDb } from '@/lib/db';
 import type { Database } from '@tauri-apps/plugin-sql';
 
-// Simplified OrderItem for client-side cart
 interface CartItem extends MenuItem {
   quantity: number;
-  cartItemId: string; // Unique ID for cart item instance
+  cartItemId: string; 
 }
 
 export default function CustomerMenuPage() {
@@ -66,8 +65,7 @@ export default function CustomerMenuPage() {
     if (tableIdFromStorage && tableNumberFromStorage) {
       setSelectedTable({ id: tableIdFromStorage, number: tableNumberFromStorage });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, [toast]); 
 
   const fetchMenuItems = async (currentDb: Database) => {
     setIsLoading(true);
@@ -160,41 +158,37 @@ export default function CustomerMenuPage() {
 
     const newOrderId = `cust-order-${Date.now()}`;
     const newOrderNumber = `CUST-${Date.now().toString().slice(-6)}`;
-    const orderType: OrderType = selectedTable.id ? 'صالة' : 'سفري'; // Default to Takeaway if no table
+    const orderType: OrderType = selectedTable.id ? 'صالة' : 'سفري'; 
     const now = new Date().toISOString();
-    const totalAmount = cartSubtotal; // For simplicity, no VAT/discount from customer side yet
+    const totalAmount = cartSubtotal; 
 
     try {
-      // Insert into orders table
       await db.execute(
-        "INSERT INTO orders (id, order_number, type, subtotal, total_amount, status, created_at, updated_at, table_id, customer_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        "INSERT INTO orders (id, order_number, type, subtotal, total_amount, status, created_at, updated_at, table_id, customer_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           newOrderId, newOrderNumber, orderType,
           cartSubtotal, totalAmount, 'قيد الانتظار',
           now, now, selectedTable.id || null,
-          selectedTable.id ? `طاولة ${selectedTable.number}` : 'عميل سفري' // Placeholder customer name
+          selectedTable.id ? `طاولة ${selectedTable.number}` : 'عميل سفري' 
         ]
       );
 
-      // Insert into order_items table
       for (const item of cartItems) {
-        // Fetch current cost for the item
-        const menuItemFromDb: any[] = await db.select("SELECT cost FROM menu_items WHERE id = $1", [item.id]);
+        const menuItemFromDb: any[] = await db.select("SELECT cost FROM menu_items WHERE id = ?", [item.id]);
         const costAtOrder = menuItemFromDb.length > 0 ? Number(menuItemFromDb[0].cost) || 0 : 0;
 
         await db.execute(
-          "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+          "INSERT INTO order_items (id, order_id, menu_item_id, menu_item_name, quantity, price_at_order, cost_at_order, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           [
             `oi-cust-${Date.now()}-${item.id}`, newOrderId, item.id, item.name,
-            item.quantity, item.price, costAtOrder, (item as any).notes || null // Assuming notes might be added to cartItem later
+            item.quantity, item.price, costAtOrder, (item as any).notes || null 
           ]
         );
       }
 
-      // Update table status if it's a table order
       if (selectedTable.id) {
         await db.execute(
-          "UPDATE tables_info SET status = 'مشغولة', current_order_id = $1, updated_at = $2 WHERE id = $3",
+          "UPDATE tables_info SET status = 'مشغولة', current_order_id = ?, updated_at = ? WHERE id = ?",
           [newOrderId, now, selectedTable.id]
         );
       }
@@ -235,7 +229,6 @@ export default function CustomerMenuPage() {
             variant="outline"
             size="lg"
             className="fixed bottom-6 end-6 rtl:end-auto rtl:start-6 z-50 shadow-lg rounded-full p-4 h-auto bg-primary text-primary-foreground hover:bg-primary/90"
-            // onClick={() => setIsSheetOpen(true)} // onOpenChange handles this
           >
             <ShoppingCart className="h-6 w-6" />
             {cartItems.length > 0 && (
@@ -263,7 +256,7 @@ export default function CustomerMenuPage() {
               <ul className="space-y-3 p-1">
                 {cartItems.map((item) => (
                   <li key={item.cartItemId} className="flex items-start gap-3 p-3 bg-secondary/30 rounded-md">
-                    <NextImage src={item.imageUrl} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
+                    <NextImage src={item.imageUrl || "https://placehold.co/40x40.png"} alt={item.name} width={40} height={40} className="rounded-md h-10 w-10 object-cover flex-shrink-0" data-ai-hint={item.dataAiHint || "food item"}/>
                     <div className="flex-grow">
                       <p className="font-medium text-sm truncate">{item.name}</p>
                       <p className="text-xs text-muted-foreground">${item.price.toFixed(2)}</p>
@@ -360,3 +353,5 @@ export default function CustomerMenuPage() {
     </div>
   );
 }
+
+    

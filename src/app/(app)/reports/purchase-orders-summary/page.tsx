@@ -88,9 +88,9 @@ export default function PurchaseOrdersSummaryReportPage() {
             );
             setDisplayedPurchaseOrders(recentPOsResult.map(po => ({
                 ...po,
-                orderDate: parseISO(po.orderDate), // orderDate is DATE type in DB
+                orderDate: parseISO(po.orderDate), 
                 totalAmount: Number(po.totalAmount),
-                items: [], // Items not needed for this summary view
+                items: [], 
             })));
 
         } catch (error) {

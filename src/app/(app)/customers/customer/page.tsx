@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
-import { type Customer, type Order, type OrderStatus } from '@/constants'; // Keep type imports for structure
+import { type Customer, type Order, type OrderStatus } from '@/constants'; 
 import { User, ShoppingBag, CalendarDays, Filter, DollarSign, ArrowRight } from 'lucide-react';
 import { format, getYear, getMonth, getDate, isValid, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -78,7 +78,7 @@ export default function CustomerDetailPage() {
       if (db && customerId) {
         setIsLoading(true);
         try {
-          const foundCustomerResult: any[] = await db.select('SELECT id, name, phone, email, loyalty_points as loyaltyPoints, join_date as joinDate, total_spent as totalSpent, notes FROM customers WHERE id = $1', [customerId]);
+          const foundCustomerResult: any[] = await db.select('SELECT id, name, phone, email, loyalty_points as loyaltyPoints, join_date as joinDate, total_spent as totalSpent, notes FROM customers WHERE id = ?', [customerId]);
           
           if (foundCustomerResult.length > 0) {
             const custData = foundCustomerResult[0];
@@ -90,14 +90,14 @@ export default function CustomerDetailPage() {
             });
 
             const customerOrdersResult: any[] = await db.select(
-              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, type, created_at as createdAt FROM orders WHERE customer_id = $1 ORDER BY created_at DESC',
+              'SELECT id, order_number as orderNumber, total_amount as totalAmount, status, type, created_at as createdAt FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
               [customerId]
             );
             setOrders(customerOrdersResult.map(order => ({
               ...order,
               createdAt: order.createdAt ? parseISO(order.createdAt) : new Date(),
               totalAmount: Number(order.totalAmount) || 0,
-              items: [], // Items are not fetched here for this overview table
+              items: [], 
             })));
 
           } else {
@@ -119,7 +119,7 @@ export default function CustomerDetailPage() {
       }
     }
     fetchCustomerAndOrders();
-  }, [db, customerId, toast]); // Removed isLoading from dependencies
+  }, [db, customerId, toast]); 
 
   const availableYears = useMemo(() => {
     const years = new Set(orders.map(order => getYear(new Date(order.createdAt)).toString()));
@@ -196,7 +196,7 @@ export default function CustomerDetailPage() {
           <p><strong>الاسم:</strong> {customer.name}</p>
           <p><strong>الهاتف:</strong> {customer.phone}</p>
           <p><strong>البريد الإلكتروني:</strong> {customer.email || '-'}</p>
-          <p><strong>تاريخ الانضمام:</strong> {format(new Date(customer.joinDate), 'PP', { locale: arSA })}</p>
+          <p><strong>تاريخ الانضمام:</strong> {isValid(new Date(customer.joinDate)) ? format(new Date(customer.joinDate), 'PP', { locale: arSA }) : '-'}</p>
           <p><strong>نقاط الولاء:</strong> {customer.loyaltyPoints}</p>
           <p><strong>إجمالي الإنفاق:</strong> ${(customer.totalSpent || 0).toFixed(2)}</p>
           {customer.notes && <p><strong>ملاحظات:</strong> {customer.notes}</p>}
@@ -267,7 +267,7 @@ export default function CustomerDetailPage() {
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{format(new Date(order.createdAt), 'PPpp', { locale: arSA })}</TableCell>
                     <TableCell>{order.type}</TableCell>
-                    <TableCell>${Number(order.totalAmount).toFixed(2)}</TableCell> {/* Ensure totalAmount is treated as number */}
+                    <TableCell>${Number(order.totalAmount).toFixed(2)}</TableCell> 
                     <TableCell>
                       <Badge variant={getStatusBadgeVariant(order.status)}>{order.status}</Badge>
                     </TableCell>

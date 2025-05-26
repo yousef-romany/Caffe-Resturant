@@ -18,7 +18,6 @@ import type { Database } from '@tauri-apps/plugin-sql';
 import { useToast } from '@/hooks/use-toast';
 
 
-// Helper to generate random colors for Pie chart
 const COLORS = ['#50C878', '#84D9A0', '#A0E0B4', '#BCE8C8', '#D6F0DC', '#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF'];
 
 interface MonthlySalesData {
@@ -27,12 +26,12 @@ interface MonthlySalesData {
 }
 
 interface CategorySalesData {
-  name: Category | string; // Allow string for flexibility if DB returns string
+  name: Category | string; 
   value: number;
 }
 
 interface OrderTypeSalesData {
-  name: OrderType | string; // Allow string
+  name: OrderType | string; 
   value: number;
 }
 
@@ -76,7 +75,7 @@ export default function AllInOneLegacyReportsPage() {
   const [totalPurchaseAmount, setTotalPurchaseAmount] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
 
-  const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); // Placeholder
+  const [currentTreasuryBalance, setCurrentTreasuryBalance] = useState(5750.75); 
   const [netCashFlow, setNetCashFlow] = useState(0);
 
   const [totalIngredients, setTotalIngredients] = useState(0);
@@ -118,7 +117,6 @@ export default function AllInOneLegacyReportsPage() {
       const endDateSqlDate = format(endDate, 'yyyy-MM-dd');
 
       try {
-        // Sales Summary
         const summaryResult: any[] = await db.select(
           "SELECT SUM(total_amount) as totalRevenue, COUNT(*) as totalOrders FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ?",
           [startDateString, endDateString]
@@ -129,7 +127,6 @@ export default function AllInOneLegacyReportsPage() {
         setTotalOrders(ordersCount);
         setAverageOrderValue(ordersCount > 0 ? revenue / ordersCount : 0);
 
-        // Monthly Sales Chart (last 6 months)
         const monthsAr = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
         const currentMonthDate = new Date();
         const salesChartDataPromises: Promise<MonthlySalesData>[] = Array(6).fill(null).map(async (_, i) => {
@@ -143,28 +140,24 @@ export default function AllInOneLegacyReportsPage() {
         });
         setMonthlySales(await Promise.all(salesChartDataPromises));
 
-        // Category Sales
         const catSalesResult: any[] = await db.select(
           `SELECT mi.category, SUM(oi.price_at_order * oi.quantity) as value FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE o.status = 'مكتمل' AND o.created_at BETWEEN ? AND ? GROUP BY mi.category ORDER BY value DESC`,
           [startDateString, endDateString]
         );
         setCategorySales(catSalesResult.map(r => ({ name: r.category, value: Number(r.value) })));
         
-        // Order Type Sales
         const otSalesResult: any[] = await db.select(
           `SELECT type, SUM(total_amount) as value FROM orders WHERE status = 'مكتمل' AND created_at BETWEEN ? AND ? GROUP BY type ORDER BY value DESC`,
           [startDateString, endDateString]
         );
         setOrderTypeSales(otSalesResult.map(r => ({ name: r.type, value: Number(r.value) })));
 
-        // Top Selling Items
         const topItemsResult: any[] = await db.select(
           `SELECT mi.name, SUM(oi.price_at_order * oi.quantity) as sales, SUM(oi.quantity) as quantity FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN menu_items mi ON oi.menu_item_id = mi.id WHERE o.status = 'مكتمل' AND o.created_at BETWEEN ? AND ? GROUP BY mi.id, mi.name ORDER BY sales DESC LIMIT 5`,
           [startDateString, endDateString]
         );
         setTopItems(topItemsResult.map(item => ({ ...item, sales: Number(item.sales), quantity: Number(item.quantity) })));
 
-        // Expenses Summary
         const employeesResult: any[] = await db.select("SELECT SUM(salary) as totalSalaries FROM employees WHERE is_active = TRUE");
         const salaries = Number(employeesResult[0]?.totalSalaries) || 0;
         setTotalSalariesPaid(salaries);
@@ -173,17 +166,14 @@ export default function AllInOneLegacyReportsPage() {
         setTotalPurchaseAmount(poAmount);
         setTotalExpenses(salaries + poAmount);
         
-        // Financial Reports
         setNetCashFlow(revenue - (salaries + poAmount));
 
-        // Inventory Reports
         const totalIngredientsResult: any[] = await db.select("SELECT COUNT(*) as count FROM ingredients");
         setTotalIngredients(Number(totalIngredientsResult[0]?.count) || 0);
         const lowStockDbResult: Ingredient[] = await db.select<Ingredient[]>("SELECT id, name, unit, stock_quantity as stockQuantity, cost_per_unit as costPerUnit, low_stock_threshold as lowStockThreshold FROM ingredients WHERE stock_quantity < low_stock_threshold AND low_stock_threshold IS NOT NULL");
         setLowStockIngredientsCount(lowStockDbResult.length);
         setLowStockItemsList(lowStockDbResult.map(ing => ({...ing, stockQuantity: Number(ing.stockQuantity), costPerUnit: Number(ing.costPerUnit), lowStockThreshold: ing.lowStockThreshold ? Number(ing.lowStockThreshold) : undefined })));
 
-        // Purchase Order Reports
         const poStatsResult: any[] = await db.select("SELECT COUNT(*) as count FROM purchase_orders WHERE order_date BETWEEN ? AND ?", [startDateSqlDate, endDateSqlDate]);
         setTotalPurchaseOrdersCount(Number(poStatsResult[0]?.count) || 0);
         const recentPOsDbResult: any[] = await db.select("SELECT id, order_number as orderNumber, supplier_name as supplierName, total_amount as totalAmount, status, order_date as orderDate FROM purchase_orders WHERE order_date BETWEEN ? AND ? ORDER BY order_date DESC LIMIT 5", [startDateSqlDate, endDateSqlDate]);
@@ -192,7 +182,6 @@ export default function AllInOneLegacyReportsPage() {
       } catch (error) {
         console.error("Error fetching all-in-one report data:", error);
         toast({ title: "خطأ", description: "فشل في جلب بيانات التقرير الشامل.", variant: "destructive" });
-        // Reset states on error
         setTotalRevenue(0); setTotalOrders(0); setAverageOrderValue(0); setMonthlySales([]); setCategorySales([]); setOrderTypeSales([]); setTopItems([]);
         setTotalSalariesPaid(0); setTotalPurchaseAmount(0); setTotalExpenses(0); setNetCashFlow(0);
         setTotalIngredients(0); setLowStockIngredientsCount(0); setLowStockItemsList([]);

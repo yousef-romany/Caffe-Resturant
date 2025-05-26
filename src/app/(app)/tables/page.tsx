@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/custom/PageHeader';
 import { TableCard } from '@/components/custom/TableCard';
-import { type Table, type TableStatus } from '@/constants'; // DUMMY_TABLES removed
+import { type Table, type TableStatus } from '@/constants'; 
 import { useToast } from '@/hooks/use-toast';
 import { Table2 as TableIcon, Filter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -57,7 +57,7 @@ export default function TablesPage() {
       );
       setTables(dbTables.map(t => ({
         ...t,
-        capacity: Number(t.capacity) // Ensure capacity is a number
+        capacity: Number(t.capacity) 
       })));
     } catch (error) {
       console.error("Error fetching tables:", error);
@@ -77,18 +77,16 @@ export default function TablesPage() {
     const tableToUpdateLocally = tables.find(t => t.id === tableId);
     if (!tableToUpdateLocally) return;
 
-    let sql = 'UPDATE tables_info SET status = $1, updated_at = CURRENT_TIMESTAMP';
+    let sql = 'UPDATE tables_info SET status = ?, updated_at = CURRENT_TIMESTAMP';
     const params: any[] = [newStatus];
     let updatedLocalOrderId: string | undefined = tableToUpdateLocally.orderId;
 
     if (newStatus === 'متاحة' || newStatus === 'تحتاج تنظيف') {
-      sql += ', current_order_id = NULL'; // Clear current_order_id
+      sql += ', current_order_id = NULL'; 
       updatedLocalOrderId = undefined;
     }
-    // If status becomes 'مشغولة', current_order_id will be set by the POS page
-    // after a new order is created and associated with this table.
-
-    sql += ' WHERE id = $' + (params.length + 1);
+    
+    sql += ' WHERE id = ?';
     params.push(tableId);
 
     try {
@@ -108,7 +106,7 @@ export default function TablesPage() {
     } catch (error) {
       console.error("Error updating table status:", error);
       toast({ title: "خطأ", description: "فشل تحديث حالة الطاولة في قاعدة البيانات.", variant: "destructive" });
-      if (db) await fetchTables(db); // Re-fetch on error to ensure UI consistency
+      if (db) await fetchTables(db); 
     }
   };
   
@@ -161,7 +159,7 @@ export default function TablesPage() {
             <TableCard
               key={table.id}
               table={table}
-              onStatusChange={handleTableStatusChange} // Pass the DB-updating function
+              onStatusChange={handleTableStatusChange} 
             />
           ))}
         </div>
@@ -174,3 +172,5 @@ export default function TablesPage() {
     </>
   );
 }
+
+    

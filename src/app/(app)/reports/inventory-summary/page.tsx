@@ -23,7 +23,7 @@ export default function InventorySummaryReportPage() {
   const [totalIngredients, setTotalIngredients] = useState(0);
   const [lowStockIngredientsCount, setLowStockIngredientsCount] = useState(0);
   const [lowStockItemsList, setLowStockItemsList] = useState<Ingredient[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly'); // Period filter is conceptual here
+  const [selectedPeriod, setSelectedPeriod] = useState<ReportPeriod>('monthly'); 
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -71,14 +71,14 @@ export default function InventorySummaryReportPage() {
       }
     }
     fetchInventoryData();
-  }, [selectedPeriod, isClient, db, toast]); // selectedPeriod is kept for consistency, though not directly used in query here
+  }, [selectedPeriod, isClient, db, toast]); 
 
   const handlePeriodChange = (value: string) => {
     setSelectedPeriod(value as ReportPeriod);
   };
 
   const getPeriodLabel = () => {
-    return "الوقت الحالي"; // Inventory is always current snapshot
+    return "الوقت الحالي"; 
   };
 
   if (!isClient || isLoading) {

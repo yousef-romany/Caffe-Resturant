@@ -49,7 +49,6 @@ export default function CustomerRegisterPage() {
       return;
     }
 
-    // Basic email validation
     if (!/\S+@\S+\.\S+/.test(email)) {
         toast({
             title: "خطأ في البريد الإلكتروني",
@@ -60,7 +59,6 @@ export default function CustomerRegisterPage() {
         return;
     }
     
-    // Basic phone validation (e.g., starts with 05 and is 10 digits long for SA numbers)
     if (!/^05\d{8}$/.test(phone)) {
         toast({
             title: "خطأ في رقم الهاتف",
@@ -80,8 +78,7 @@ export default function CustomerRegisterPage() {
         return;
       }
 
-      // Check if email or phone already exists
-      const existingEmailCheck: any[] = await db.select("SELECT id FROM customers WHERE email = $1", [email]);
+      const existingEmailCheck: any[] = await db.select("SELECT id FROM customers WHERE email = ?", [email]);
       if (existingEmailCheck.length > 0) {
         toast({
           title: "خطأ في التسجيل",
@@ -92,7 +89,7 @@ export default function CustomerRegisterPage() {
         return;
       }
 
-      const existingPhoneCheck: any[] = await db.select("SELECT id FROM customers WHERE phone = $1", [phone]);
+      const existingPhoneCheck: any[] = await db.select("SELECT id FROM customers WHERE phone = ?", [phone]);
       if (existingPhoneCheck.length > 0) {
         toast({
           title: "خطأ في التسجيل",
@@ -106,10 +103,8 @@ export default function CustomerRegisterPage() {
       const newCustomerId = `cust-${Date.now()}`;
       const joinDate = format(new Date(), 'yyyy-MM-dd');
 
-      // Note: Password is not stored in the 'customers' table in the current schema.
-      // A full auth system would require password hashing and a separate users table or adding a hashed_password field.
       await db.execute(
-        "INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, total_spent) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "INSERT INTO customers (id, name, phone, email, loyalty_points, join_date, total_spent) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [newCustomerId, fullName, phone, email, 0, joinDate, 0]
       );
 
@@ -178,3 +173,5 @@ export default function CustomerRegisterPage() {
     </>
   );
 }
+
+    

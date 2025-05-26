@@ -1,5 +1,5 @@
 
-"use client";
+"use client"; // Make this a Client Component
 
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,7 +15,7 @@ import {
   SidebarInset,
   SidebarTrigger,
   SidebarSeparator,
-  SidebarMenuButton, // Import SidebarMenuButton
+  SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import {
   Accordion,
@@ -30,39 +30,78 @@ import { ThemeToggle } from "@/components/custom/ThemeToggle";
 import { NAV_ITEMS, SETTINGS_NAV_ITEM, type NavItem, type CategorySlug } from "@/constants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "react"; // Import useEffect and useState
 
 interface AppLayoutProps {
   children: ReactNode;
+}
+
+interface UserSession {
+  userId: string;
+  username: string;
+  fullName?: string;
+  roleNames: string[];
+  permissionNames: string[];
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [activeKitchenSlugForNav, setActiveKitchenSlugForNav] = useState<CategorySlug | null>(null);
+  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [isSessionLoaded, setIsSessionLoaded] = useState(false);
 
   useEffect(() => {
-    if (pathname === '/kitchen-display') {
-      const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
-      if (storedSlug) {
-        setActiveKitchenSlugForNav(storedSlug);
-      } else {
-        // If no slug in localStorage, default to the first one in NAV_ITEMS or null
-        const kitchenNav = NAV_ITEMS.find(item => item.label === 'شاشة المطبخ');
-        const firstKitchenSubItemSlug = kitchenNav?.children?.[0]?.slug;
-        setActiveKitchenSlugForNav(firstKitchenSubItemSlug || null);
+    // Load user session and permissions from localStorage
+    const sessionString = localStorage.getItem('userSession');
+    if (sessionString) {
+      try {
+        const sessionData: UserSession = JSON.parse(sessionString);
+        setUserPermissions(sessionData.permissionNames || []);
+      } catch (e) {
+        console.error("Failed to parse user session from localStorage", e);
+        setUserPermissions([]); // Default to no permissions on error
       }
-    } else {
-      // If not on /kitchen-display, no specific kitchen category is active for nav highlighting
+    }
+    setIsSessionLoaded(true);
+
+    // Update active kitchen slug based on localStorage
+    const storedSlug = localStorage.getItem('selectedKitchenCategorySlug') as CategorySlug | null;
+    if (pathname === '/kitchen-display' && storedSlug) {
+      setActiveKitchenSlugForNav(storedSlug);
+    } else if (pathname !== '/kitchen-display') {
       setActiveKitchenSlugForNav(null);
     }
   }, [pathname]);
 
 
+  const canView = (item: NavItem): boolean => {
+    if (!item.requiredPermission) {
+      return true; // Item is public or visible by default if no permission specified
+    }
+    return userPermissions.includes(item.requiredPermission);
+  };
+
   const renderNavItems = (items: NavItem[], isSubMenu = false, parentHref?: string) => {
-    return items.map((item) => {
+    return items
+      .filter(canView) // Filter items based on permissions
+      .map((item) => {
       if (item.children && item.children.length > 0) {
-        const isChildActive = item.children?.some(child => {
+        const visibleChildren = item.children.filter(canView);
+        if (visibleChildren.length === 0 && item.requiredPermission && !canView(item)) {
+            // If the parent itself has a permission and user doesn't have it,
+            // and no children are visible, don't render the accordion.
+            // This might still render if parent has no perm but all children are filtered out.
+            return null;
+        }
+        if (visibleChildren.length === 0 && !item.requiredPermission) {
+            // If the parent has no specific permission, but all its children are filtered out,
+            // do not render the parent accordion either.
+            return null;
+        }
+
+
+        const isChildActive = visibleChildren.some(child => {
           if (item.href === '/kitchen-display' && child.slug) {
             return activeKitchenSlugForNav === child.slug && pathname === '/kitchen-display';
           }
@@ -74,9 +113,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
           isChildActive;
 
         if (item.href === '/kitchen-display' && pathname !== '/kitchen-display') {
-            isActiveGroup = false; // Don't highlight main kitchen nav if not on kitchen page
+            isActiveGroup = false;
         } else if (item.href === '/kitchen-display' && pathname === '/kitchen-display') {
-            isActiveGroup = true; // Highlight main kitchen nav if on kitchen page, sub-item highlights based on slug
+            isActiveGroup = true;
         }
         
         return (
@@ -101,13 +140,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </div>
             </AccordionTrigger>
             <AccordionContent className="pt-1 ps-3">
-              <SidebarMenu>{renderNavItems(item.children, true, item.href)}</SidebarMenu>
+              <SidebarMenu>{renderNavItems(visibleChildren, true, item.href)}</SidebarMenu>
             </AccordionContent>
           </AccordionItem>
         );
       }
 
-      // Handle kitchen sub-items specifically
+      // Handle kitchen sub-items specifically for navigation state, not permission filtering here
       if (parentHref === '/kitchen-display' && item.slug) {
         const currentItemSlug = item.slug;
         return (
@@ -121,18 +160,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 if (currentItemSlug) {
                   localStorage.setItem('selectedKitchenCategorySlug', currentItemSlug);
                   setActiveKitchenSlugForNav(currentItemSlug);
-                  if (pathname === '/kitchen-display') {
-                    // Force re-render or trigger useEffect in kitchen-display if already on the page
-                    // One way is to temporarily change path then change back, or manage a refresh state.
-                    // Forcing a push to the same path can sometimes work.
-                    router.push('/kitchen-display');
-                  } else {
-                    router.push('/kitchen-display');
-                  }
+                  router.push('/kitchen-display'); // This will trigger re-render of kitchen-display page
                 }
               }}
             >
-              <a> {/* Using <a> for semantic correctness with asChild, but it won't navigate via href */}
+              <a>
                 <item.icon className="h-5 w-5" />
                 <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
               </a>
@@ -148,6 +180,36 @@ export default function AppLayout({ children }: AppLayoutProps) {
       );
     });
   };
+
+  if (!isSessionLoaded) {
+    // Optionally, render a loading skeleton or null for the sidebar while session is loading
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar
+          collapsible="icon"
+          side="right"
+          className="border-l border-r-0 border-sidebar-border shadow-sm"
+        >
+           <SidebarHeader className="p-4">
+            <AppLogo />
+          </SidebarHeader>
+          {/* Add Skeleton loaders here if desired */}
+        </Sidebar>
+        <SidebarInset>
+          <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 shadow-sm backdrop-blur-md md:px-6">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger />
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <UserNav />
+            </div>
+          </header>
+          <main className="flex-1 p-4 md:p-6">{children}</main>
+        </SidebarInset>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen>
@@ -169,7 +231,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <SidebarSeparator />
         <SidebarFooter className="p-2">
           <SidebarMenu>
-            {SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0 ? (
+            {SETTINGS_NAV_ITEM.children && SETTINGS_NAV_ITEM.children.length > 0 && canView(SETTINGS_NAV_ITEM) ? (
               <Accordion type="single" collapsible className="w-full">
                  <AccordionItem
                     value={SETTINGS_NAV_ITEM.label}
@@ -196,7 +258,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </AccordionContent>
                   </AccordionItem>
               </Accordion>
-            ) : (
+            ) : canView(SETTINGS_NAV_ITEM) ? (
                <SidebarMenuItem>
                   <NavLink
                     href={SETTINGS_NAV_ITEM.href}
@@ -204,7 +266,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     label={SETTINGS_NAV_ITEM.label}
                   />
               </SidebarMenuItem>
-            )}
+            ) : null}
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>

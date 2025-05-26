@@ -36,7 +36,7 @@ const getPeriodDateRange = (period: ReportPeriod): { startDate: Date; endDate: D
 };
 
 interface TopSellingItemData {
-  id: string; // Assuming menu_item_id
+  id: string; 
   name: string;
   sales: number;
   quantity: number;
